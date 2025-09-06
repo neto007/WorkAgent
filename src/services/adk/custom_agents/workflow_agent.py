@@ -349,9 +349,20 @@ class WorkflowAgent(BaseAgent):
         async def message_node_function(
             state: State, node_id: str, node_data: Dict[str, Any]
         ) -> AsyncGenerator[State, None]:
+            # Handle both old and new message format
             message_data = node_data.get("message", {})
-            message_type = message_data.get("type", "text")
-            message_content = message_data.get("content", "")
+            if isinstance(message_data, str):
+                # New format: message is directly a string
+                message_content = message_data
+                message_type = "text"
+            elif isinstance(message_data, dict):
+                # Old format: message is an object with type and content
+                message_type = message_data.get("type", "text")
+                message_content = message_data.get("content", "")
+            else:
+                # Fallback
+                message_content = str(message_data) if message_data else ""
+                message_type = "text"
 
             print(f"\n💬 MESSAGE-NODE: {message_content}")
 
@@ -742,8 +753,17 @@ class WorkflowAgent(BaseAgent):
         self, ctx: InvocationContext, flow_data: Dict[str, Any]
     ) -> StateGraph:
         """Creates a StateGraph from the flow data."""
+        # Debug: Print flow_data structure
+        print(f"Flow data keys: {list(flow_data.keys()) if flow_data else 'None'}")
+        print(f"Flow data: {flow_data}")
+        
         # Extract nodes from the flow
         nodes = flow_data.get("nodes", [])
+        print(f"Found {len(nodes)} nodes in flow_data")
+        
+        if nodes:
+            for i, node in enumerate(nodes):
+                print(f"Node {i}: id={node.get('id')}, type={node.get('type')}")
 
         # Initialize StateGraph
         graph_builder = StateGraph(State)
@@ -826,10 +846,20 @@ class WorkflowAgent(BaseAgent):
         if not entry_point and nodes:
             entry_point = nodes[0].get("id")
 
+        # Validate that we have nodes and an entry point
+        if not nodes:
+            raise ValueError("No nodes found in flow_json. Cannot create workflow graph.")
+        
+        if not entry_point:
+            raise ValueError("No entry point found. Workflow must have at least one node.")
+        
+        # Validate that the entry point exists in node_specific_functions
+        if entry_point not in node_specific_functions:
+            raise ValueError(f"Entry point '{entry_point}' not found in available nodes: {list(node_specific_functions.keys())}")
+
         # Define the entry point
-        if entry_point:
-            print(f"Defining entry point: {entry_point}")
-            graph_builder.set_entry_point(entry_point)
+        print(f"Defining entry point: {entry_point}")
+        graph_builder.set_entry_point(entry_point)
 
         # Compile the graph
         return graph_builder.compile()
@@ -907,12 +937,18 @@ class WorkflowAgent(BaseAgent):
         sent_events = 0
 
         async for state in graph.astream(initial_state, {"recursion_limit": 100}):
-            for node_state in state.values():
-                content = node_state.get("content", [])
-                for event in content[sent_events:]:
-                    if event.author != "user":
-                        yield event
-                sent_events = len(content)
+            # LangGraph returns a dict where keys are node names and values are the updated state
+            # We need to get the actual state from the values, not iterate over key-value pairs
+            if isinstance(state, dict):
+                # Get the latest state (usually the last value in the dict)
+                for node_name, updated_state in state.items():
+                    if isinstance(updated_state, dict):
+                        content = updated_state.get("content", [])
+                        for event in content[sent_events:]:
+                            if hasattr(event, 'author') and event.author != "user":
+                                yield event
+                        sent_events = len(content)
+                        break  # Only process the first valid state update
 
         # Execute sub-agents if any
         for sub_agent in self.sub_agents:

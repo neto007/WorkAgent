@@ -178,20 +178,14 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
         # Special handling for a2a type agents
         if agent.type == "a2a":
             if not agent.agent_card_url:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="agent_card_url is required for a2a type agents",
-                )
+                raise ValueError("agent_card_url is required for a2a type agents")
 
             try:
                 # Fetch agent card information
                 async with httpx.AsyncClient() as client:
                     response = await client.get(agent.agent_card_url)
                     if response.status_code != 200:
-                        raise HTTPException(
-                            status_code=status.HTTP_400_BAD_REQUEST,
-                            detail=f"Failed to fetch agent card: HTTP {response.status_code}",
-                        )
+                        raise ValueError(f"Failed to fetch agent card: HTTP {response.status_code}")
                     agent_card = response.json()
 
                 # Update agent with information from agent card
@@ -217,10 +211,7 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
 
             except Exception as e:
                 logger.error(f"Error fetching agent card: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Failed to process agent card: {str(e)}",
-                )
+                raise ValueError(f"Failed to process agent card: {str(e)}")
 
         elif agent.type == "workflow":
             if not isinstance(agent.config, dict):
@@ -231,45 +222,26 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
 
         elif agent.type == "task":
             if not isinstance(agent.config, dict):
-                agent.config = {}
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid configuration: must be an object with tasks",
-                )
+                raise ValueError("Invalid configuration: must be an object with tasks")
 
             if "tasks" not in agent.config:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid configuration: tasks is required for {agent.type} agents",
-                )
+                raise ValueError(f"Invalid configuration: tasks is required for {agent.type} agents")
 
             if not agent.config["tasks"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid configuration: tasks cannot be empty",
-                )
+                raise ValueError("Invalid configuration: tasks cannot be empty")
 
             for task in agent.config["tasks"]:
                 if "agent_id" not in task:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="Each task must have an agent_id",
-                    )
+                    raise ValueError("Each task must have an agent_id")
 
                 agent_id = task["agent_id"]
                 task_agent = get_agent(db, agent_id)
                 if not task_agent:
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Agent not found for task: {agent_id}",
-                    )
+                    raise ValueError(f"Agent not found for task: {agent_id}")
 
             if "sub_agents" in agent.config and agent.config["sub_agents"]:
                 if not validate_sub_agents(db, agent.config["sub_agents"]):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail="One or more sub-agents do not exist",
-                    )
+                    raise ValueError("One or more sub-agents do not exist")
 
             if "api_key" not in agent.config or not agent.config["api_key"]:
                 agent.config["api_key"] = generate_api_key()
@@ -277,28 +249,16 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
         # Additional sub-agent validation (for non-llm and non-a2a types)
         elif agent.type != "llm":
             if not isinstance(agent.config, dict):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid configuration: must be an object with sub_agents",
-                )
+                raise ValueError("Invalid configuration: must be an object with sub_agents")
 
             if "sub_agents" not in agent.config:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid configuration: sub_agents is required for sequential, parallel or loop agents",
-                )
+                raise ValueError("Invalid configuration: sub_agents is required for sequential, parallel or loop agents")
 
             if not agent.config["sub_agents"]:
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Invalid configuration: sub_agents cannot be empty",
-                )
+                raise ValueError("Invalid configuration: sub_agents cannot be empty")
 
             if not validate_sub_agents(db, agent.config["sub_agents"]):
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="One or more sub-agents do not exist",
-                )
+                raise ValueError("One or more sub-agents do not exist")
 
         # Process the configuration before creating the agent
         config = agent.config

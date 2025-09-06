@@ -488,15 +488,28 @@ async def create_agent(
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
-    # Verify if the user has access to the agent's client
-    await verify_user_client(payload, db, agent.client_id)
+    try:
+        # Verify if the user has access to the agent's client
+        await verify_user_client(payload, db, agent.client_id)
 
-    db_agent = await agent_service.create_agent(db, agent)
+        db_agent = await agent_service.create_agent(db, agent)
 
-    if not db_agent.agent_card_url:
-        db_agent.agent_card_url = db_agent.agent_card_url_property
+        if not db_agent.agent_card_url:
+            db_agent.agent_card_url = db_agent.agent_card_url_property
 
-    return db_agent
+        return db_agent
+    except ValueError as e:
+        logger.error(f"Validation error creating agent: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error creating agent: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to create agent: {str(e)}"
+        )
 
 
 @router.get("/{agent_id}", response_model=Agent)
@@ -528,27 +541,40 @@ async def update_agent(
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
-    # Get the current agent
-    db_agent = agent_service.get_agent(db, agent_id)
-    if db_agent is None:
+    try:
+        # Get the current agent
+        db_agent = agent_service.get_agent(db, agent_id)
+        if db_agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+            )
+
+        # Verify if the user has access to the agent's client
+        await verify_user_client(payload, db, db_agent.client_id)
+
+        # If trying to change the client_id, verify permission for the new client as well
+        if "client_id" in agent_data and agent_data["client_id"] != str(db_agent.client_id):
+            new_client_id = uuid.UUID(agent_data["client_id"])
+            await verify_user_client(payload, db, new_client_id)
+
+        updated_agent = await agent_service.update_agent(db, agent_id, agent_data)
+
+        if not updated_agent.agent_card_url:
+            updated_agent.agent_card_url = updated_agent.agent_card_url_property
+
+        return updated_agent
+    except ValueError as e:
+        logger.error(f"Validation error updating agent {agent_id}: {str(e)}")
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
         )
-
-    # Verify if the user has access to the agent's client
-    await verify_user_client(payload, db, db_agent.client_id)
-
-    # If trying to change the client_id, verify permission for the new client as well
-    if "client_id" in agent_data and agent_data["client_id"] != str(db_agent.client_id):
-        new_client_id = uuid.UUID(agent_data["client_id"])
-        await verify_user_client(payload, db, new_client_id)
-
-    updated_agent = await agent_service.update_agent(db, agent_id, agent_data)
-
-    if not updated_agent.agent_card_url:
-        updated_agent.agent_card_url = updated_agent.agent_card_url_property
-
-    return updated_agent
+    except Exception as e:
+        logger.error(f"Unexpected error updating agent {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update agent: {str(e)}"
+        )
 
 
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)

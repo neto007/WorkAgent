@@ -214,7 +214,7 @@ class AgentBuilder:
             else:
                 raise ValueError(f"Invalid agent type: {agent.type}")
 
-            sub_agents.append(sub_agent)
+            sub_agents.append((sub_agent, exit_stack))
             logger.info(f"Sub-agent added: {agent.name}")
 
         logger.info(f"Sub-agents created: {len(sub_agents)}")
@@ -401,6 +401,12 @@ class AgentBuilder:
         sub_agents = [agent for agent, _ in sub_agents_with_stacks]
         logger.info(f"Extracted sub-agents: {[agent.name for agent in sub_agents]}")
 
+        # Combine all exit stacks from sub-agents
+        combined_exit_stack = AsyncExitStack()
+        for _, exit_stack in sub_agents_with_stacks:
+            if exit_stack:
+                await combined_exit_stack.enter_async_context(exit_stack)
+
         if root_agent.type == "sequential":
             logger.info(f"Creating SequentialAgent with {len(sub_agents)} sub-agents")
             return (
@@ -409,7 +415,7 @@ class AgentBuilder:
                     sub_agents=sub_agents,
                     description=root_agent.config.get("description", ""),
                 ),
-                None,
+                combined_exit_stack,
             )
         elif root_agent.type == "parallel":
             logger.info(f"Creating ParallelAgent with {len(sub_agents)} sub-agents")
@@ -419,7 +425,7 @@ class AgentBuilder:
                     sub_agents=sub_agents,
                     description=root_agent.config.get("description", ""),
                 ),
-                None,
+                combined_exit_stack,
             )
         elif root_agent.type == "loop":
             logger.info(f"Creating LoopAgent with {len(sub_agents)} sub-agents")
@@ -430,7 +436,7 @@ class AgentBuilder:
                     description=root_agent.config.get("description", ""),
                     max_iterations=root_agent.config.get("max_iterations", 5),
                 ),
-                None,
+                combined_exit_stack,
             )
         else:
             raise ValueError(f"Invalid agent type: {root_agent.type}")

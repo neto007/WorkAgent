@@ -264,10 +264,33 @@ export default function AgentsPage() {
       loadAgents();
       setIsDialogOpen(false);
       resetForm();
-    } catch (error) {
+    } catch (error: any) {
+      console.error("Error saving agent:", error);
+      
+      let errorMessage = "Unable to save agent";
+      
+      // Extract specific error message from backend response
+      if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error?.response?.data?.message) {
+        errorMessage = error.response.data.message;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      // Handle validation errors (422)
+      if (error?.response?.status === 422) {
+        if (Array.isArray(error.response.data?.detail)) {
+          const validationErrors = error.response.data.detail
+            .map((err: any) => `${err.loc?.join('.')} - ${err.msg}`)
+            .join('; ');
+          errorMessage = `Validation error: ${validationErrors}`;
+        }
+      }
+      
       toast({
         title: "Error",
-        description: "Unable to save agent",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
