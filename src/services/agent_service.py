@@ -1,6 +1,6 @@
 import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 import httpx
 from fastapi import HTTPException, status
@@ -10,6 +10,8 @@ from sqlalchemy.orm import Session
 from src.models.models import Agent, AgentFolder, ApiKey
 from src.schemas.schemas import AgentCreate
 from src.services.mcp_server_service import get_mcp_server
+from src.repositories.agent_repository import AgentRepository
+from src.core.exceptions import ResourceNotFoundError
 
 logger = logging.getLogger(__name__)
 
@@ -60,8 +62,8 @@ def validate_sub_agents(db: Session, sub_agents: list[uuid.UUID | str]) -> bool:
     return True
 
 
-def get_agent(db: Session, agent_id: uuid.UUID | str) -> Agent | None:
-    """Search for an agent by ID"""
+def get_agent(db: Session, agent_id: uuid.UUID | str) -> Optional[Agent]:
+    """Search for an agent by ID using AgentRepository"""
     try:
         # Convert to UUID if it's a string
         if isinstance(agent_id, str):
@@ -71,7 +73,9 @@ def get_agent(db: Session, agent_id: uuid.UUID | str) -> Agent | None:
                 logger.warning(f"Invalid agent ID: {agent_id}")
                 return None
 
-        agent = db.query(Agent).filter(Agent.id == agent_id).first()
+        agent_repo = AgentRepository(db)
+        agent = agent_repo.get(agent_id)
+
         if not agent:
             logger.warning(f"Agent not found: {agent_id}")
             return None
@@ -79,8 +83,7 @@ def get_agent(db: Session, agent_id: uuid.UUID | str) -> Agent | None:
         # Sanitize agent name if it contains spaces or special characters
         if agent.name and any(c for c in agent.name if not (c.isalnum() or c == "_")):
             agent.name = "".join(c if c.isalnum() or c == "_" else "_" for c in agent.name)
-            # Update in database
-            db.commit()
+            agent_repo.update(agent)
 
         return agent
     except SQLAlchemyError as e:
