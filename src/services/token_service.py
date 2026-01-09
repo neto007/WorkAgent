@@ -8,7 +8,7 @@ from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
 from src.models.models import RefreshToken
-from src.core.jwt_middleware import create_access_token
+from src.services.auth_service import create_access_token
 import logging
 
 logger = logging.getLogger(__name__)

@@ -1,70 +1,72 @@
 """
-Redis configuration module.
-
-This module defines the Redis connection settings and provides
-function to create a Redis connection pool for the application.
+Redis configuration and client management.
 """
 
+import redis.asyncio as redis
+from typing import Optional
 import os
-import redis
-from dotenv import load_dotenv
 import logging
-
-# Load environment variables
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 
+# Redis client singleton
+_redis_client: Optional[redis.Redis] = None
 
-def get_redis_config():
+
+async def get_redis() -> redis.Redis:
     """
-    Get Redis configuration from environment variables.
+    Get Redis client singleton.
 
     Returns:
-        dict: Redis configuration parameters
+        Redis client instance
     """
-    return {
-        "host": os.getenv("REDIS_HOST", "localhost"),
-        "port": int(os.getenv("REDIS_PORT", 6379)),
-        "db": int(os.getenv("REDIS_DB", 0)),
-        "password": os.getenv("REDIS_PASSWORD", None),
-        "ssl": os.getenv("REDIS_SSL", "false").lower() == "true",
-        "key_prefix": os.getenv("REDIS_KEY_PREFIX", "a2a:"),
-        "default_ttl": int(os.getenv("REDIS_TTL", 3600)),
-    }
+    global _redis_client
+
+    if _redis_client is None:
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        max_connections = int(os.getenv("REDIS_MAX_CONNECTIONS", "10"))
+
+        try:
+            _redis_client = await redis.from_url(
+                redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+                max_connections=max_connections,
+            )
+            # Test connection
+            await _redis_client.ping()
+            logger.info(f"Redis connected: {redis_url}")
+        except Exception as e:
+            logger.error(f"Redis connection failed: {e}")
+            # Return None to allow app to work without Redis
+            _redis_client = None
+            raise
+
+    return _redis_client
 
 
-def create_redis_pool(config=None):
+async def close_redis():
+    """Close Redis connection."""
+    global _redis_client
+    if _redis_client:
+        await _redis_client.close()
+        _redis_client = None
+        logger.info("Redis connection closed")
+
+
+async def health_check() -> bool:
     """
-    Create and return a Redis connection pool.
-
-    Args:
-        config (dict, optional): Redis configuration. If None,
-                                 configuration is loaded from environment
+    Check Redis health.
 
     Returns:
-        redis.ConnectionPool: Redis connection pool
+        True if Redis is healthy
     """
-    if config is None:
-        config = get_redis_config()
-
     try:
-        connection_pool = redis.ConnectionPool(
-            host=config["host"],
-            port=config["port"],
-            db=config["db"],
-            password=config["password"] if config["password"] else None,
-            ssl=config["ssl"],
-            decode_responses=True,
-        )
-        # Test the connection
-        redis_client = redis.Redis(connection_pool=connection_pool)
-        redis_client.ping()
-        logger.info(
-            f"Redis connection successful: {config['host']}:{config['port']}, "
-            f"db={config['db']}, ssl={config['ssl']}"
-        )
-        return connection_pool
-    except redis.RedisError as e:
-        logger.error(f"Redis connection error: {e}")
-        raise
+        client = await get_redis()
+        if client:
+            await client.ping()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Redis health check failed: {e}")
+        return False
