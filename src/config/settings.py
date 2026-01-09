@@ -1,8 +1,8 @@
 import os
-from typing import Optional, List
-from pydantic_settings import BaseSettings
 import secrets
+
 from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
 # Load environment variables
 load_dotenv()
@@ -19,9 +19,7 @@ class Settings(BaseSettings):
 
     # Organization settings
     ORGANIZATION_NAME: str = os.getenv("ORGANIZATION_NAME", "Evo AI")
-    ORGANIZATION_URL: str = os.getenv(
-        "ORGANIZATION_URL", "https://evoai.evoapicloud.com"
-    )
+    ORGANIZATION_URL: str = os.getenv("ORGANIZATION_URL", "https://evoai.evoapicloud.com")
 
     # Database settings
     POSTGRES_CONNECTION_STRING: str = os.getenv(
@@ -39,7 +37,7 @@ class Settings(BaseSettings):
     REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
     REDIS_PORT: int = int(os.getenv("REDIS_PORT", 6379))
     REDIS_DB: int = int(os.getenv("REDIS_DB", 0))
-    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD")
+    REDIS_PASSWORD: str | None = os.getenv("REDIS_PASSWORD")
     REDIS_SSL: bool = os.getenv("REDIS_SSL", "false").lower() == "true"
     REDIS_KEY_PREFIX: str = os.getenv("REDIS_KEY_PREFIX", "evoai:")
     REDIS_TTL: int = int(os.getenv("REDIS_TTL", 3600))
@@ -79,12 +77,10 @@ class Settings(BaseSettings):
     DEBUG: bool = os.getenv("DEBUG", "false").lower() == "true"
 
     # CORS settings
-    CORS_ORIGINS: List[str] = os.getenv("CORS_ORIGINS", "*").split(",")
+    CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "*").split(",")
 
     # Token settings
-    TOKEN_EXPIRY_HOURS: int = int(
-        os.getenv("TOKEN_EXPIRY_HOURS", 24)
-    )  # Verification/reset tokens
+    TOKEN_EXPIRY_HOURS: int = int(os.getenv("TOKEN_EXPIRY_HOURS", 24))  # Verification/reset tokens
 
     # Security settings
     PASSWORD_MIN_LENGTH: int = int(os.getenv("PASSWORD_MIN_LENGTH", 8))
@@ -93,9 +89,7 @@ class Settings(BaseSettings):
 
     # Seeder settings
     ADMIN_EMAIL: str = os.getenv("ADMIN_EMAIL", "admin@evoai.com")
-    ADMIN_INITIAL_PASSWORD: str = os.getenv(
-        "ADMIN_INITIAL_PASSWORD", "strongpassword123"
-    )
+    ADMIN_INITIAL_PASSWORD: str = os.getenv("ADMIN_INITIAL_PASSWORD", "strongpassword123")
     DEMO_EMAIL: str = os.getenv("DEMO_EMAIL", "demo@example.com")
     DEMO_PASSWORD: str = os.getenv("DEMO_PASSWORD", "demo123")
     DEMO_CLIENT_NAME: str = os.getenv("DEMO_CLIENT_NAME", "Demo Client")

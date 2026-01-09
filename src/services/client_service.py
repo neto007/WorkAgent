@@ -1,18 +1,19 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
+import logging
+import uuid
+
 from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from src.models.models import Client, User
 from src.schemas.schemas import ClientCreate
 from src.schemas.user import UserCreate
 from src.services.user_service import create_user
-from typing import List, Optional, Tuple
-import uuid
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-def get_client(db: Session, client_id: uuid.UUID) -> Optional[Client]:
+def get_client(db: Session, client_id: uuid.UUID) -> Client | None:
     """Search for a client by ID"""
     try:
         client = db.query(Client).filter(Client.id == client_id).first()
@@ -28,7 +29,7 @@ def get_client(db: Session, client_id: uuid.UUID) -> Optional[Client]:
         )
 
 
-def get_clients(db: Session, skip: int = 0, limit: int = 100) -> List[Client]:
+def get_clients(db: Session, skip: int = 0, limit: int = 100) -> list[Client]:
     """Search for all clients with pagination"""
     try:
         return db.query(Client).offset(skip).limit(limit).all()
@@ -58,9 +59,7 @@ def create_client(db: Session, client: ClientCreate) -> Client:
         )
 
 
-def update_client(
-    db: Session, client_id: uuid.UUID, client: ClientCreate
-) -> Optional[Client]:
+def update_client(db: Session, client_id: uuid.UUID, client: ClientCreate) -> Client | None:
     """Updates an existing client"""
     try:
         db_client = get_client(db, client_id)
@@ -105,7 +104,7 @@ def delete_client(db: Session, client_id: uuid.UUID) -> bool:
 
 def create_client_with_user(
     db: Session, client_data: ClientCreate, user_data: UserCreate
-) -> Tuple[Optional[Client], str]:
+) -> tuple[Client | None, str]:
     """
     Creates a new client with an associated user
 
@@ -150,7 +149,7 @@ def create_client_with_user(
         return None, f"Unexpected error: {str(e)}"
 
 
-def get_client_user(db: Session, client_id: uuid.UUID) -> Optional[User]:
+def get_client_user(db: Session, client_id: uuid.UUID) -> User | None:
     """
     Search for the user associated with a client
 

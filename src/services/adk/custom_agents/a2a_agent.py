@@ -1,21 +1,19 @@
+import os
+from collections.abc import AsyncGenerator
+from uuid import uuid4
+
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
 from google.genai.types import Content, Part
 
-from typing import AsyncGenerator, List, Dict, Any, Optional
-import json
-import os
-
 from src.schemas.a2a_types import AgentCard
 from src.utils.a2a_enhanced_client import (
-    EnhancedA2AClient,
     A2AClientConfig,
     A2AImplementation,
     A2AResponse,
+    EnhancedA2AClient,
 )
-
-from uuid import uuid4
 
 
 class A2ACustomAgent(BaseAgent):
@@ -28,10 +26,10 @@ class A2ACustomAgent(BaseAgent):
 
     # Field declarations for Pydantic
     agent_card_url: str
-    agent_card: Optional[AgentCard]
+    agent_card: AgentCard | None
     timeout: int
     base_url: str
-    api_key: Optional[str]
+    api_key: str | None
     preferred_implementation: A2AImplementation
 
     def __init__(
@@ -39,9 +37,9 @@ class A2ACustomAgent(BaseAgent):
         name: str,
         agent_card_url: str,
         timeout: int = 3600,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         preferred_implementation: A2AImplementation = A2AImplementation.AUTO,
-        sub_agents: List[BaseAgent] = [],
+        sub_agents: list[BaseAgent] = [],
         **kwargs,
     ):
         """
@@ -166,7 +164,9 @@ class A2ACustomAgent(BaseAgent):
                     if part in ["a2a", "a2a-sdk"] and i + 1 < len(path_parts):
                         agent_id = path_parts[i + 1]
                         # Remove .well-known/agent.json if present
-                        agent_id = agent_id.replace(".well-known", "").replace("agent.json", "").strip("/")
+                        agent_id = (
+                            agent_id.replace(".well-known", "").replace("agent.json", "").strip("/")
+                        )
                         if agent_id:
                             return agent_id
 
@@ -182,9 +182,7 @@ class A2ACustomAgent(BaseAgent):
             print(f"Error extracting agent ID from URL {url}: {e}")
             return "unknown-agent"
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         """
         Enhanced A2A implementation using the official SDK client.
 
@@ -272,7 +270,7 @@ class A2ACustomAgent(BaseAgent):
                 ),
             )
 
-    def _extract_user_message(self, ctx: InvocationContext) -> Optional[str]:
+    def _extract_user_message(self, ctx: InvocationContext) -> str | None:
         """Extract user message from the invocation context."""
         user_message = None
 
@@ -329,9 +327,7 @@ class A2ACustomAgent(BaseAgent):
                         author=self.name,
                         content=Content(
                             role="agent",
-                            parts=[
-                                Part(text=f"Streaming error: {response_chunk.error}")
-                            ],
+                            parts=[Part(text=f"Streaming error: {response_chunk.error}")],
                         ),
                     )
 
@@ -364,9 +360,7 @@ class A2ACustomAgent(BaseAgent):
                         author=self.name,
                         content=Content(
                             role="agent",
-                            parts=[
-                                Part(text="Received response without readable content")
-                            ],
+                            parts=[Part(text="Received response without readable content")],
                         ),
                     )
             else:
@@ -385,7 +379,7 @@ class A2ACustomAgent(BaseAgent):
                 content=Content(role="agent", parts=[Part(text=error_msg)]),
             )
 
-    def _create_event_from_response(self, response: A2AResponse) -> Optional[Event]:
+    def _create_event_from_response(self, response: A2AResponse) -> Event | None:
         """Create an Event from an A2A response."""
         try:
             response_data = response.data

@@ -1,39 +1,38 @@
-import uuid
-import base64
+import json
+import logging
+from datetime import datetime
+
 from fastapi import (
     APIRouter,
     Depends,
+    Header,
     HTTPException,
-    status,
     WebSocket,
     WebSocketDisconnect,
-    Header,
+    status,
 )
 from sqlalchemy.orm import Session
-from src.config.settings import settings
+
 from src.config.database import get_db
+from src.config.settings import settings
+from src.core.exceptions import AgentNotFoundError
 from src.core.jwt_middleware import (
     get_jwt_token,
-    verify_user_client,
     get_jwt_token_ws,
+    verify_user_client,
 )
+from src.schemas.chat import ChatRequest, ChatResponse, ErrorResponse, FileData
 from src.services import (
     agent_service,
 )
-from src.schemas.chat import ChatRequest, ChatResponse, ErrorResponse, FileData
-from src.services.adk.agent_runner import run_agent as run_agent_adk, run_agent_stream
+from src.services.adk.agent_runner import run_agent as run_agent_adk
+from src.services.adk.agent_runner import run_agent_stream
 from src.services.crewai.agent_runner import run_agent as run_agent_crewai
-from src.core.exceptions import AgentNotFoundError
 from src.services.service_providers import (
-    session_service,
     artifacts_service,
     memory_service,
+    session_service,
 )
-
-from datetime import datetime
-import logging
-import json
-from typing import Optional, Dict, List, Any
 
 logger = logging.getLogger(__name__)
 
@@ -46,8 +45,8 @@ router = APIRouter(
 
 async def get_agent_by_api_key(
     agent_id: str,
-    api_key: Optional[str] = Header(None, alias="x-api-key"),
-    authorization: Optional[str] = Header(None),
+    api_key: str | None = Header(None, alias="x-api-key"),
+    authorization: str | None = Header(None),
     db: Session = Depends(get_db),
 ):
     """Flexible authentication for chat routes, allowing JWT or API key"""
@@ -84,15 +83,11 @@ async def get_agent_by_api_key(
 
     agent = agent_service.get_agent(db, agent_id)
     if not agent or not agent.config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the API key matches
     if not agent.config.get("api_key") or agent.config.get("api_key") != api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     return agent
 
@@ -127,19 +122,19 @@ async def websocket_chat(
         # 2. Handle First Message (Auth or Chat)
         try:
             data = await websocket.receive_json()
-            
+
             # Check if it is an explicit auth message
             if data.get("type") == "authorization":
                 logger.info(f"Authentication data received: {data}")
-                
+
                 # Logic for explicit auth (override cookie auth or first attempt)
                 auth_success_local = False
                 agent = agent_service.get_agent(db, agent_id)
-                
+
                 if not agent:
-                     logger.warning(f"Agent {agent_id} not found")
-                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                     return
+                    logger.warning(f"Agent {agent_id} not found")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
 
                 if data.get("token"):
                     try:
@@ -149,7 +144,7 @@ async def websocket_chat(
                             auth_success_local = True
                     except Exception as e:
                         logger.warning(f"JWT handshake authentication failed: {str(e)}")
-                
+
                 if not auth_success_local and data.get("api_key"):
                     if agent.config and agent.config.get("api_key") == data.get("api_key"):
                         auth_success_local = True
@@ -158,11 +153,11 @@ async def websocket_chat(
 
                 if auth_success_local:
                     is_authenticated = True
-                elif not is_authenticated: # Failed local auth and no cookie auth
+                elif not is_authenticated:  # Failed local auth and no cookie auth
                     logger.warning("Invalid authentication message")
                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                     return
-            
+
             else:
                 # It is NOT an auth message. It is likely a chat message.
                 if is_authenticated:
@@ -175,8 +170,8 @@ async def websocket_chat(
                     return
 
         except WebSocketDisconnect:
-             logger.info("Client disconnected during handshake")
-             return
+            logger.info("Client disconnected during handshake")
+            return
 
         if not is_authenticated:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
@@ -306,6 +301,4 @@ async def chat(
     except AgentNotFoundError as e:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)) from e

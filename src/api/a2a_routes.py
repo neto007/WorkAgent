@@ -8,7 +8,7 @@ This is the official and only A2A implementation for the Evo AI platform.
 
 Methods implemented:
 - message/send: Send a message and get response
-- message/stream: Send a message and stream response  
+- message/stream: Send a message and stream response
 - agent/authenticatedExtendedCard: Get agent information (via .well-known/agent.json)
 
 Features:
@@ -19,30 +19,30 @@ Features:
 - API key authentication
 """
 
-import uuid
-import logging
-import json
 import base64
-import httpx
+import json
+import logging
+import uuid
 from datetime import datetime
-from typing import Dict, Any, List, Optional
+from typing import Any
 
-from fastapi import APIRouter, Depends, Header, Request, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from sqlalchemy.orm import Session
-from starlette.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
 from sqlalchemy.sql import text
+from sse_starlette.sse import EventSourceResponse
+from starlette.responses import JSONResponse
 
 from src.config.database import get_db
 from src.config.settings import settings
-from src.services.agent_service import get_agent
+from src.schemas.chat import FileData
 from src.services.adk.agent_runner import run_agent, run_agent_stream
+from src.services.agent_service import get_agent
 from src.services.service_providers import (
-    session_service,
     artifacts_service,
     memory_service,
+    session_service,
 )
-from src.schemas.chat import FileData
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +72,7 @@ async def verify_api_key(db: Session, x_api_key: str) -> bool:
     return True
 
 
-def extract_text_from_message(message: Dict[str, Any]) -> str:
+def extract_text_from_message(message: dict[str, Any]) -> str:
     """Extract text from message parts according to A2A spec."""
     if not message or "parts" not in message:
         return ""
@@ -84,7 +84,7 @@ def extract_text_from_message(message: Dict[str, Any]) -> str:
     return ""
 
 
-def extract_files_from_message(message: Dict[str, Any]) -> List[FileData]:
+def extract_files_from_message(message: dict[str, Any]) -> list[FileData]:
     """Extract files from message parts according to A2A spec."""
     files = []
     if not message or "parts" not in message:
@@ -102,15 +102,11 @@ def extract_files_from_message(message: Dict[str, Any]) -> List[FileData]:
 
                     file_obj = FileData(
                         filename=file_data.get("name", "file"),
-                        content_type=file_data.get(
-                            "mimeType", "application/octet-stream"
-                        ),
+                        content_type=file_data.get("mimeType", "application/octet-stream"),
                         data=file_data["bytes"],  # Keep as base64 string
                     )
                     files.append(file_obj)
-                    logger.info(
-                        f"📎 Extracted file: {file_obj.filename} ({file_obj.content_type})"
-                    )
+                    logger.info(f"📎 Extracted file: {file_obj.filename} ({file_obj.content_type})")
 
                 except Exception as e:
                     logger.error(f"❌ Invalid base64 in file: {e}")
@@ -128,9 +124,9 @@ def create_task_response(
     task_id: str,
     context_id: str,
     final_response: str,
-    conversation_history: Optional[List[Dict[str, Any]]] = None,
-    current_user_message: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    conversation_history: list[dict[str, Any]] | None = None,
+    current_user_message: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Create Task response according to A2A specification."""
 
     logger.info(
@@ -145,7 +141,7 @@ def create_task_response(
         }
     ]
 
-    logger.info(f"📦 Created main artifact")
+    logger.info("📦 Created main artifact")
 
     # Create Task response according to A2A spec
     task_response = {
@@ -180,7 +176,7 @@ def create_task_response(
 
     # Add current user message if provided (this is the message that triggered this response)
     if current_user_message:
-        logger.info(f"📝 Adding current user message to history")
+        logger.info("📝 Adding current user message to history")
         a2a_message = {
             "role": "user",
             "parts": [{"type": "text", "text": current_user_message["content"]}],
@@ -205,7 +201,7 @@ def create_task_response(
     else:
         logger.warning("⚠️ No conversation history provided to create_task_response")
 
-    logger.info(f"✅ create_task_response returning A2A compliant Task object")
+    logger.info("✅ create_task_response returning A2A compliant Task object")
     return task_response
 
 
@@ -238,23 +234,21 @@ def clean_message_content(content: str, role: str) -> str:
     return content
 
 
-def extract_conversation_history(
-    agent_id: str, external_id: str
-) -> List[Dict[str, Any]]:
+def extract_conversation_history(agent_id: str, external_id: str) -> list[dict[str, Any]]:
     """Extract conversation history from session using the same logic as /sessions/{session_id}/messages."""
     logger.info(
         f"🔍 extract_conversation_history called with agent_id={agent_id}, external_id={external_id}"
     )
 
     try:
-        from src.services.session_service import get_session_events, get_session_by_id
+        from src.services.session_service import get_session_by_id, get_session_events
 
         # Get session ID in the correct format (same as working endpoint)
         session_id = f"{external_id}_{agent_id}"
         logger.info(f"📋 Constructed session_id: {session_id}")
 
         # First, verify session exists (same as working endpoint)
-        logger.info(f"🔍 Verifying session exists...")
+        logger.info("🔍 Verifying session exists...")
         session = get_session_by_id(session_service, session_id)
         if not session:
             logger.warning(f"⚠️ Session not found: {session_id}")
@@ -263,11 +257,9 @@ def extract_conversation_history(
         logger.info(f"✅ Session found: {session_id}")
 
         # Get events using same method as working endpoint
-        logger.info(f"🔍 Getting events for session...")
+        logger.info("🔍 Getting events for session...")
         events = get_session_events(session_service, session_id)
-        logger.info(
-            f"📋 get_session_events returned {len(events) if events else 0} events"
-        )
+        logger.info(f"📋 get_session_events returned {len(events) if events else 0} events")
 
         history = []
 
@@ -278,9 +270,7 @@ def extract_conversation_history(
             )
 
             # Convert event to dict like in working endpoint
-            event_dict = (
-                event.model_dump() if hasattr(event, "model_dump") else event.__dict__
-            )
+            event_dict = event.model_dump() if hasattr(event, "model_dump") else event.__dict__
 
             # Check if event has content with parts (same logic as working endpoint)
             if event_dict.get("content") and event_dict["content"].get("parts"):
@@ -298,9 +288,7 @@ def extract_conversation_history(
 
                         # Clean the content to remove JSON artifacts
                         cleaned_content = clean_message_content(text_content, role)
-                        logger.info(
-                            f"📝 Cleaned content for {role}: {cleaned_content[:50]}..."
-                        )
+                        logger.info(f"📝 Cleaned content for {role}: {cleaned_content[:50]}...")
 
                         # Create A2A compatible history entry
                         history_entry = {
@@ -332,7 +320,7 @@ def extract_conversation_history(
         return []
 
 
-def extract_history_from_params(params: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_history_from_params(params: dict[str, Any]) -> list[dict[str, Any]]:
     """Extract history from request params according to A2A spec."""
     history = []
     if "history" in params and isinstance(params["history"], list):
@@ -341,11 +329,7 @@ def extract_history_from_params(params: Dict[str, Any]) -> List[Dict[str, Any]]:
                 # Extract text from parts
                 text_content = ""
                 for part in msg["parts"]:
-                    if (
-                        isinstance(part, dict)
-                        and part.get("type") == "text"
-                        and "text" in part
-                    ):
+                    if isinstance(part, dict) and part.get("type") == "text" and "text" in part:
                         text_content += part["text"] + " "
 
                 if text_content.strip():
@@ -363,8 +347,8 @@ def extract_history_from_params(params: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 
 def combine_histories(
-    request_history: List[Dict[str, Any]], session_history: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
+    request_history: list[dict[str, Any]], session_history: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
     """Combine request history with session history, avoiding duplicates."""
     combined = []
 
@@ -378,8 +362,7 @@ def combine_histories(
         is_duplicate = False
         for existing_msg in combined:
             if (
-                req_msg.get("messageId")
-                and req_msg["messageId"] == existing_msg.get("messageId")
+                req_msg.get("messageId") and req_msg["messageId"] == existing_msg.get("messageId")
             ) or (
                 req_msg["content"] == existing_msg["content"]
                 and req_msg["role"] == existing_msg["role"]
@@ -441,19 +424,13 @@ async def process_a2a_message(
         elif method == "tasks/cancel":
             return await handle_tasks_cancel(agent_id, params, request_id, db)
         elif method == "tasks/pushNotificationConfig/set":
-            return await handle_tasks_push_notification_config_set(
-                agent_id, params, request_id, db
-            )
+            return await handle_tasks_push_notification_config_set(agent_id, params, request_id, db)
         elif method == "tasks/pushNotificationConfig/get":
-            return await handle_tasks_push_notification_config_get(
-                agent_id, params, request_id, db
-            )
+            return await handle_tasks_push_notification_config_get(agent_id, params, request_id, db)
         elif method == "tasks/resubscribe":
             return await handle_tasks_resubscribe(agent_id, params, request_id, db)
         elif method == "agent/authenticatedExtendedCard":
-            return await handle_agent_authenticated_extended_card(
-                agent_id, params, request_id, db
-            )
+            return await handle_agent_authenticated_extended_card(agent_id, params, request_id, db)
         else:
             # JSON-RPC error for method not found
             return JSONResponse(
@@ -500,7 +477,7 @@ async def process_a2a_message(
 
 
 async def handle_message_send(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle message/send according to A2A spec."""
 
@@ -529,19 +506,15 @@ async def handle_message_send(
     if not push_notification_config:
         push_notification_config = params.get("pushNotificationConfig")
 
-    logger.info(
-        f"🔔 Push notification config found: {push_notification_config is not None}"
-    )
+    logger.info(f"🔔 Push notification config found: {push_notification_config is not None}")
 
     if push_notification_config:
         # Support both official spec format and common variations
-        webhook_url = push_notification_config.get(
-            "url"
-        ) or push_notification_config.get("webhookUrl")
-
-        logger.info(
-            f"🔔 Push notification config provided: {webhook_url or 'No URL found'}"
+        webhook_url = push_notification_config.get("url") or push_notification_config.get(
+            "webhookUrl"
         )
+
+        logger.info(f"🔔 Push notification config provided: {webhook_url or 'No URL found'}")
 
         # Validate push notification config according to A2A spec (support both url and webhookUrl)
         if not webhook_url:
@@ -568,9 +541,7 @@ async def handle_message_send(
                     "error": {
                         "code": -32602,
                         "message": "Invalid params",
-                        "data": {
-                            "error": "pushNotificationConfig.url MUST use HTTPS for security"
-                        },
+                        "data": {"error": "pushNotificationConfig.url MUST use HTTPS for security"},
                     },
                 }
             )
@@ -628,17 +599,15 @@ async def handle_message_send(
             f"🔍 Attempting to extract conversation history for agent {agent_id}, context {context_id}"
         )
         conversation_history = extract_conversation_history(str(agent_id), context_id)
-        logger.info(
-            f"📚 Session history extracted: {len(conversation_history)} messages"
-        )
+        logger.info(f"📚 Session history extracted: {len(conversation_history)} messages")
 
         # Extract history from params
-        logger.info(f"🔍 Attempting to extract history from request params")
+        logger.info("🔍 Attempting to extract history from request params")
         request_history = extract_history_from_params(params)
         logger.info(f"📝 Request history extracted: {len(request_history)} messages")
 
         # Combine histories
-        logger.info(f"🔗 Combining histories...")
+        logger.info("🔗 Combining histories...")
         combined_history = combine_histories(request_history, conversation_history)
         logger.info(f"📖 Combined history has {len(combined_history)} total messages")
 
@@ -647,9 +616,7 @@ async def handle_message_send(
             logger.info(f"  History[{i}]: {msg['role']} - {msg['content'][:50]}...")
 
         # Execute agent with files - the ADK runner will handle session history automatically
-        logger.info(
-            f"🤖 Executing agent {agent_id} with message: {text} and {len(files)} files"
-        )
+        logger.info(f"🤖 Executing agent {agent_id} with message: {text} and {len(files)} files")
         logger.info(
             f"📚 ADK will provide session context automatically ({len(combined_history)} previous messages available)"
         )
@@ -697,14 +664,12 @@ async def handle_message_send(
         if push_notification_config:
             try:
                 await send_push_notification(task_response, push_notification_config)
-                logger.info(f"🔔 Push notification sent successfully")
+                logger.info("🔔 Push notification sent successfully")
             except Exception as e:
                 logger.error(f"❌ Push notification failed: {e}")
                 # Continue execution - push notification failure shouldn't break the response
 
-        return JSONResponse(
-            content={"jsonrpc": "2.0", "id": request_id, "result": task_response}
-        )
+        return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": task_response})
 
     except Exception as e:
         logger.error(f"❌ Agent execution error: {e}")
@@ -722,7 +687,7 @@ async def handle_message_send(
 
 
 async def handle_message_stream(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> EventSourceResponse:
     """Handle message/stream according to A2A spec."""
 
@@ -1045,15 +1010,11 @@ async def get_session_history(
         if limit > 0:
             history = history[-limit:]
 
-        return JSONResponse(
-            {"sessionId": session_id, "history": history, "total": len(history)}
-        )
+        return JSONResponse({"sessionId": session_id, "history": history, "total": len(history)})
 
     except Exception as e:
         logger.error(f"❌ Error getting session history: {e}")
-        raise HTTPException(
-            status_code=500, detail=f"Error getting session history: {str(e)}"
-        )
+        raise HTTPException(status_code=500, detail=f"Error getting session history: {str(e)}")
 
 
 @router.post("/{agent_id}/conversation/history")
@@ -1181,9 +1142,7 @@ async def get_conversation_history(
             },
         }
 
-        return JSONResponse(
-            content={"jsonrpc": "2.0", "id": request_id, "result": task_response}
-        )
+        return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": task_response})
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=400, detail="Invalid JSON")
@@ -1203,7 +1162,7 @@ async def get_conversation_history(
 
 
 async def send_push_notification(
-    task_response: Dict[str, Any], push_notification_config: Dict[str, Any]
+    task_response: dict[str, Any], push_notification_config: dict[str, Any]
 ):
     """Send push notification according to A2A specification section 9.5.
 
@@ -1217,24 +1176,20 @@ async def send_push_notification(
     - webhookAuthenticationInfo instead of authentication
     """
     # Support both official spec format and common variations
-    webhook_url = push_notification_config.get("url") or push_notification_config.get(
-        "webhookUrl"
-    )
+    webhook_url = push_notification_config.get("url") or push_notification_config.get("webhookUrl")
     webhook_token = push_notification_config.get("token")
 
     # Support both official and alternative authentication field names
-    authentication = push_notification_config.get(
-        "authentication"
-    ) or push_notification_config.get("webhookAuthenticationInfo")
+    authentication = push_notification_config.get("authentication") or push_notification_config.get(
+        "webhookAuthenticationInfo"
+    )
 
     if not webhook_url:
         raise ValueError("pushNotificationConfig.url (or webhookUrl) is required")
 
     # Validate HTTPS requirement (A2A spec: url MUST be HTTPS for security to prevent SSRF)
     if not webhook_url.startswith("https://"):
-        raise ValueError(
-            "pushNotificationConfig.url MUST use HTTPS to prevent SSRF attacks"
-        )
+        raise ValueError("pushNotificationConfig.url MUST use HTTPS to prevent SSRF attacks")
 
     logger.info(f"🔔 Sending push notification to: {webhook_url}")
 
@@ -1247,7 +1202,7 @@ async def send_push_notification(
     # Add client token if provided (A2A spec: server SHOULD include in X-A2A-Notification-Token header)
     if webhook_token:
         headers["X-A2A-Notification-Token"] = webhook_token
-        logger.info(f"🔑 Added client token to notification headers")
+        logger.info("🔑 Added client token to notification headers")
 
     # Handle authentication according to A2A spec PushNotificationAuthenticationInfo
     if authentication:
@@ -1255,7 +1210,7 @@ async def send_push_notification(
 
         # Handle "none" type (no authentication)
         if auth_type == "none":
-            logger.info(f"🔓 No authentication required for webhook")
+            logger.info("🔓 No authentication required for webhook")
 
         # Handle schemes-based authentication (official A2A spec format)
         elif "schemes" in authentication:
@@ -1267,11 +1222,9 @@ async def send_push_notification(
                     # Bearer token authentication
                     if auth_credentials:
                         headers["Authorization"] = f"Bearer {auth_credentials}"
-                        logger.info(f"🔐 Added Bearer authentication")
+                        logger.info("🔐 Added Bearer authentication")
                     else:
-                        logger.warning(
-                            "⚠️ Bearer scheme specified but no credentials provided"
-                        )
+                        logger.warning("⚠️ Bearer scheme specified but no credentials provided")
 
                 elif scheme.lower() == "apikey":
                     # API Key authentication
@@ -1294,11 +1247,9 @@ async def send_push_notification(
                         except (json.JSONDecodeError, TypeError):
                             # Fallback: treat credentials as direct API key value
                             headers["X-API-Key"] = str(auth_credentials)
-                            logger.info(f"🔐 Added API Key authentication (fallback)")
+                            logger.info("🔐 Added API Key authentication (fallback)")
                     else:
-                        logger.warning(
-                            "⚠️ ApiKey scheme specified but no credentials provided"
-                        )
+                        logger.warning("⚠️ ApiKey scheme specified but no credentials provided")
 
                 else:
                     logger.warning(f"⚠️ Unsupported authentication scheme: {scheme}")
@@ -1308,7 +1259,7 @@ async def send_push_notification(
             token = authentication.get("token") or authentication.get("credentials")
             if token:
                 headers["Authorization"] = f"Bearer {token}"
-                logger.info(f"🔐 Added Bearer authentication (alternative format)")
+                logger.info("🔐 Added Bearer authentication (alternative format)")
 
         elif auth_type == "apikey":
             api_key = (
@@ -1332,13 +1283,9 @@ async def send_push_notification(
     try:
         # Use 30 second timeout as recommended for webhook calls
         async with httpx.AsyncClient(timeout=30.0) as client:
-            logger.info(
-                f"📤 Sending POST request to webhook with {len(headers)} headers"
-            )
+            logger.info(f"📤 Sending POST request to webhook with {len(headers)} headers")
 
-            response = await client.post(
-                webhook_url, headers=headers, json=notification_payload
-            )
+            response = await client.post(webhook_url, headers=headers, json=notification_payload)
 
             # Log the response according to A2A spec recommendations
             if response.status_code == 200:
@@ -1352,9 +1299,7 @@ async def send_push_notification(
                     f"⚠️ Push notification received non-success response: {response.status_code} from {webhook_url}"
                 )
                 try:
-                    response_text = response.text[
-                        :200
-                    ]  # Log first 200 chars of response
+                    response_text = response.text[:200]  # Log first 200 chars of response
                     logger.warning(f"Response body: {response_text}")
                 except:
                     pass
@@ -1378,7 +1323,7 @@ async def send_push_notification(
 
 # Task management functions (A2A spec section 7.3-7.7)
 async def handle_tasks_get(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle tasks/get according to A2A spec section 7.3."""
     logger.info(f"🔍 Processing tasks/get for agent {agent_id}")
@@ -1409,9 +1354,7 @@ async def handle_tasks_get(
             "kind": "task",
         }
 
-        return JSONResponse(
-            content={"jsonrpc": "2.0", "id": request_id, "result": task_response}
-        )
+        return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": task_response})
 
     except Exception as e:
         logger.error(f"❌ tasks/get error: {e}")
@@ -1429,7 +1372,7 @@ async def handle_tasks_get(
 
 
 async def handle_tasks_cancel(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle tasks/cancel according to A2A spec section 7.4."""
     logger.info(f"🛑 Processing tasks/cancel for agent {agent_id}")
@@ -1482,7 +1425,7 @@ task_push_configs = {}  # In-memory storage for demo - use database in productio
 
 
 async def handle_tasks_push_notification_config_set(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle tasks/pushNotificationConfig/set according to A2A spec section 7.5."""
     logger.info(f"🔔 Processing tasks/pushNotificationConfig/set for agent {agent_id}")
@@ -1560,7 +1503,7 @@ async def handle_tasks_push_notification_config_set(
 
 
 async def handle_tasks_push_notification_config_get(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle tasks/pushNotificationConfig/get according to A2A spec section 7.6."""
     logger.info(f"🔍 Processing tasks/pushNotificationConfig/get for agent {agent_id}")
@@ -1623,7 +1566,7 @@ async def handle_tasks_push_notification_config_get(
 
 
 async def handle_tasks_resubscribe(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle tasks/resubscribe according to A2A spec section 7.7."""
     logger.info(f"🔄 Processing tasks/resubscribe for agent {agent_id}")
@@ -1680,7 +1623,7 @@ async def handle_tasks_resubscribe(
 
 
 async def handle_agent_authenticated_extended_card(
-    agent_id: uuid.UUID, params: Dict[str, Any], request_id: str, db: Session
+    agent_id: uuid.UUID, params: dict[str, Any], request_id: str, db: Session
 ) -> JSONResponse:
     """Handle agent/authenticatedExtendedCard according to A2A spec section 7.8."""
     logger.info(f"🛡️ Processing agent/authenticatedExtendedCard for agent {agent_id}")
@@ -1757,9 +1700,7 @@ async def handle_agent_authenticated_extended_card(
             },
         }
 
-        return JSONResponse(
-            content={"jsonrpc": "2.0", "id": request_id, "result": extended_card}
-        )
+        return JSONResponse(content={"jsonrpc": "2.0", "id": request_id, "result": extended_card})
 
     except Exception as e:
         logger.error(f"❌ agent/authenticatedExtendedCard error: {e}")

@@ -1,10 +1,8 @@
-import os
 import shutil
 import uuid
-from typing import List
 from pathlib import Path
-from fastapi import APIRouter, File, UploadFile, HTTPException, status
-from src.config.settings import settings
+
+from fastapi import APIRouter, File, HTTPException, UploadFile, status
 
 router = APIRouter(
     prefix="/uploads",
@@ -20,6 +18,7 @@ ALLOWED_CONTENT_TYPES = ["image/jpeg", "image/png", "image/gif", "image/svg+xml"
 if not UPLOAD_DIR.exists():
     UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
+
 @router.post("/avatar", status_code=status.HTTP_201_CREATED)
 async def upload_avatar(file: UploadFile = File(...)):
     """
@@ -30,7 +29,7 @@ async def upload_avatar(file: UploadFile = File(...)):
     if file.content_type not in ALLOWED_CONTENT_TYPES:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_CONTENT_TYPES)}"
+            detail=f"Invalid file type. Allowed types: {', '.join(ALLOWED_CONTENT_TYPES)}",
         )
 
     # Generate unique filename
@@ -42,13 +41,13 @@ async def upload_avatar(file: UploadFile = File(...)):
         # Save file
         with file_path.open("wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
-            
+
         # Check file size (approximate)
         if file_path.stat().st_size > MAX_FILE_SIZE:
-             file_path.unlink() # Delete file
-             raise HTTPException(
+            file_path.unlink()  # Delete file
+            raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File too large. Maximum size is {MAX_FILE_SIZE/1024/1024}MB"
+                detail=f"File too large. Maximum size is {MAX_FILE_SIZE/1024/1024}MB",
             )
 
         # Return URL
@@ -61,5 +60,5 @@ async def upload_avatar(file: UploadFile = File(...)):
             file_path.unlink()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Could not save file: {str(e)}"
+            detail=f"Could not save file: {str(e)}",
         )

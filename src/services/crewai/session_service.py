@@ -1,26 +1,23 @@
-from datetime import datetime
-import json
-import uuid
 import base64
 import copy
-from typing import Any, Dict, List, Optional, Union, Set
+import json
+import uuid
+from datetime import datetime
+from typing import Any
 
-from sqlalchemy import create_engine, Boolean, Text, ForeignKeyConstraint
-from sqlalchemy.ext.declarative import declarative_base
+from pydantic import BaseModel
+from sqlalchemy import Boolean, ForeignKeyConstraint, Text, create_engine
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import (
-    sessionmaker,
-    relationship,
     DeclarativeBase,
     Mapped,
     mapped_column,
+    relationship,
+    sessionmaker,
 )
 from sqlalchemy.sql import func
-from sqlalchemy.types import DateTime, PickleType, String
-from sqlalchemy.dialects import postgresql
-from sqlalchemy.types import TypeDecorator
-
-from pydantic import BaseModel
+from sqlalchemy.types import DateTime, PickleType, String, TypeDecorator
 
 from src.utils.logger import setup_logger
 
@@ -69,9 +66,7 @@ class StorageSession(Base):
 
     app_name: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[str] = mapped_column(String, primary_key=True)
-    id: Mapped[str] = mapped_column(
-        String, primary_key=True, default=lambda: str(uuid.uuid4())
-    )
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
 
     state: Mapped[MutableDict[str, Any]] = mapped_column(
         MutableDict.as_mutable(DynamicJSON), default={}
@@ -108,12 +103,8 @@ class StorageEvent(Base):
     content: Mapped[dict[str, Any]] = mapped_column(DynamicJSON, nullable=True)
     actions: Mapped[MutableDict[str, Any]] = mapped_column(PickleType)
 
-    long_running_tool_ids_json: Mapped[Optional[str]] = mapped_column(
-        Text, nullable=True
-    )
-    grounding_metadata: Mapped[dict[str, Any]] = mapped_column(
-        DynamicJSON, nullable=True
-    )
+    long_running_tool_ids_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    grounding_metadata: Mapped[dict[str, Any]] = mapped_column(DynamicJSON, nullable=True)
     partial: Mapped[bool] = mapped_column(Boolean, nullable=True)
     turn_complete: Mapped[bool] = mapped_column(Boolean, nullable=True)
     error_code: Mapped[str] = mapped_column(String, nullable=True)
@@ -190,32 +181,32 @@ class State:
 class Content(BaseModel):
     """Event content model, compatible with ADK."""
 
-    parts: List[Dict[str, Any]]
+    parts: list[dict[str, Any]]
 
 
 class Part(BaseModel):
     """Content part model, compatible with ADK."""
 
-    text: Optional[str] = None
+    text: str | None = None
 
 
 class Event(BaseModel):
     """Event model, compatible with ADK."""
 
-    id: Optional[str] = None
+    id: str | None = None
     author: str
-    branch: Optional[str] = None
-    invocation_id: Optional[str] = None
-    content: Optional[Content] = None
-    actions: Optional[Dict[str, Any]] = None
-    timestamp: Optional[float] = None
-    long_running_tool_ids: Optional[Set[str]] = None
-    grounding_metadata: Optional[Dict[str, Any]] = None
-    partial: Optional[bool] = None
-    turn_complete: Optional[bool] = None
-    error_code: Optional[str] = None
-    error_message: Optional[str] = None
-    interrupted: Optional[bool] = None
+    branch: str | None = None
+    invocation_id: str | None = None
+    content: Content | None = None
+    actions: dict[str, Any] | None = None
+    timestamp: float | None = None
+    long_running_tool_ids: set[str] | None = None
+    grounding_metadata: dict[str, Any] | None = None
+    partial: bool | None = None
+    turn_complete: bool | None = None
+    error_code: str | None = None
+    error_message: str | None = None
+    interrupted: bool | None = None
 
 
 class Session(BaseModel):
@@ -224,8 +215,8 @@ class Session(BaseModel):
     app_name: str
     user_id: str
     id: str
-    state: Dict[str, Any] = {}
-    events: List[Event] = []
+    state: dict[str, Any] = {}
+    events: list[Event] = []
     last_update_time: float
 
     class Config:
@@ -253,7 +244,7 @@ class CrewSessionService:
         logger.info(f"CrewSessionService started with database at {db_url}")
 
     def create_session(
-        self, agent_id: str, external_id: str, session_id: Optional[str] = None
+        self, agent_id: str, external_id: str, session_id: str | None = None
     ) -> Session:
         """
         Creates a new session for an agent.
@@ -271,9 +262,7 @@ class CrewSessionService:
         with self.Session() as db_session:
             # Check if app and user states already exist
             storage_app_state = db_session.get(StorageAppState, (agent_id))
-            storage_user_state = db_session.get(
-                StorageUserState, (agent_id, external_id)
-            )
+            storage_user_state = db_session.get(StorageUserState, (agent_id, external_id))
 
             app_state = storage_app_state.state if storage_app_state else {}
             user_state = storage_user_state.state if storage_user_state else {}
@@ -314,14 +303,10 @@ class CrewSessionService:
                 last_update_time=storage_session.update_time.timestamp(),
             )
 
-        logger.info(
-            f"Session created: {session_id} for agent {agent_id} and user {external_id}"
-        )
+        logger.info(f"Session created: {session_id} for agent {agent_id} and user {external_id}")
         return session
 
-    def get_session(
-        self, agent_id: str, external_id: str, session_id: str
-    ) -> Optional[Session]:
+    def get_session(self, agent_id: str, external_id: str, session_id: str) -> Session | None:
         """
         Retrieves a session from the database.
 
@@ -334,9 +319,7 @@ class CrewSessionService:
             Optional[Session]: The retrieved session or None if not found
         """
         with self.Session() as db_session:
-            storage_session = db_session.get(
-                StorageSession, (agent_id, external_id, session_id)
-            )
+            storage_session = db_session.get(StorageSession, (agent_id, external_id, session_id))
 
             if storage_session is None:
                 return None
@@ -352,9 +335,7 @@ class CrewSessionService:
 
             # Fetch states
             storage_app_state = db_session.get(StorageAppState, (agent_id))
-            storage_user_state = db_session.get(
-                StorageUserState, (agent_id, external_id)
-            )
+            storage_user_state = db_session.get(StorageUserState, (agent_id, external_id))
 
             app_state = storage_app_state.state if storage_app_state else {}
             user_state = storage_user_state.state if storage_user_state else {}
@@ -485,9 +466,7 @@ class CrewSessionService:
                     for p in encoded_content.get("parts", []):
                         if "inline_data" in p:
                             p["inline_data"]["data"] = (
-                                base64.b64encode(p["inline_data"]["data"]).decode(
-                                    "utf-8"
-                                ),
+                                base64.b64encode(p["inline_data"]["data"]).decode("utf-8"),
                             )
                     storage_event.content = encoded_content
 
@@ -502,7 +481,7 @@ class CrewSessionService:
 
         logger.info(f"Session saved: {session.id} with {len(session.events)} events")
 
-    def list_sessions(self, agent_id: str, external_id: str) -> List[Dict[str, Any]]:
+    def list_sessions(self, agent_id: str, external_id: str) -> list[dict[str, Any]]:
         """
         Lists all sessions for an agent and user.
 
@@ -596,7 +575,7 @@ def _merge_state(app_state, user_state, session_state):
     return merged_state
 
 
-def _decode_content(content: Optional[dict[str, Any]]) -> Optional[Content]:
+def _decode_content(content: dict[str, Any] | None) -> Content | None:
     """Decodes event content potentially with binary data."""
     if not content:
         return None

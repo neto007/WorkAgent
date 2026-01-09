@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from starlette.concurrency import run_in_threadpool
-from sqlalchemy.orm import Session
-from src.config.database import get_db
-from typing import List
+import logging
 import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
+
+from src.config.database import get_db
 from src.core.jwt_middleware import (
     get_jwt_token,
     verify_admin,
@@ -15,7 +17,6 @@ from src.schemas.schemas import (
 from src.services import (
     mcp_server_service,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,7 @@ router = APIRouter(
     tags=["mcp-servers"],
     responses={404: {"description": "Not found"}},
 )
+
 
 # Last edited by Arley Peter on 2025-05-17
 @router.post("/", response_model=MCPServer, status_code=status.HTTP_201_CREATED)
@@ -39,7 +41,7 @@ async def create_mcp_server(
     return await run_in_threadpool(mcp_server_service.create_mcp_server, db, server)
 
 
-@router.get("/", response_model=List[MCPServer])
+@router.get("/", response_model=list[MCPServer])
 async def read_mcp_servers(
     skip: int = 0,
     limit: int = 100,
@@ -59,9 +61,7 @@ async def read_mcp_server(
     # All authenticated users can view MCP server details
     db_server = mcp_server_service.get_mcp_server(db, server_id)
     if db_server is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found")
     return db_server
 
 
@@ -77,9 +77,7 @@ async def update_mcp_server(
 
     db_server = mcp_server_service.update_mcp_server(db, server_id, server)
     if db_server is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found")
     return db_server
 
 
@@ -93,6 +91,4 @@ async def delete_mcp_server(
     await verify_admin(payload)
 
     if not mcp_server_service.delete_mcp_server(db, server_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="MCP server not found")

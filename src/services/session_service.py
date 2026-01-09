@@ -1,16 +1,15 @@
-from google.adk.sessions import DatabaseSessionService
-from sqlalchemy.orm import Session
-from src.models.models import Session as SessionModel
-from google.adk.events import Event
-from google.adk.sessions import Session as SessionADK
-from typing import Optional, List
-from fastapi import HTTPException, status
-from sqlalchemy.exc import SQLAlchemyError
-
-from src.services.agent_service import get_agents_by_client
-
-import uuid
 import logging
+import uuid
+
+from fastapi import HTTPException, status
+from google.adk.events import Event
+from google.adk.sessions import DatabaseSessionService
+from google.adk.sessions import Session as SessionADK
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.models.models import Session as SessionModel
+from src.services.agent_service import get_agents_by_client
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +31,7 @@ def _session_to_dict(session: SessionModel):
 def get_sessions_by_client(
     db: Session,
     client_id: uuid.UUID,
-) -> List[dict]:
+) -> list[dict]:
     """Search for sessions of a client with pagination"""
     try:
         agents_by_client = get_agents_by_client(db, client_id)
@@ -55,7 +54,7 @@ def get_sessions_by_agent(
     agent_id: uuid.UUID,
     skip: int = 0,
     limit: int = 100,
-) -> List[dict]:
+) -> list[dict]:
     """Search for sessions of an agent with pagination"""
     try:
         agent_id_str = str(agent_id)
@@ -74,7 +73,7 @@ def get_sessions_by_agent(
 
 def get_session_by_id(
     session_service: DatabaseSessionService, session_id: str
-) -> Optional[SessionADK]:
+) -> SessionADK | None:
     """Search for a session by ID"""
     try:
         if not session_id or "_" not in session_id:
@@ -141,9 +140,7 @@ def delete_session(session_service: DatabaseSessionService, session_id: str) -> 
         )
 
 
-def get_session_events(
-    session_service: DatabaseSessionService, session_id: str
-) -> List[Event]:
+def get_session_events(session_service: DatabaseSessionService, session_id: str) -> list[Event]:
     """Search for the events of a session by ID"""
     try:
         session = get_session_by_id(session_service, session_id)

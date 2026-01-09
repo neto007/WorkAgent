@@ -26,12 +26,13 @@
 └──────────────────────────────────────────────────────────────────────────────┘
 """
 
-from typing import List, Dict, Any
 import asyncio
+from typing import Any
 
 from src.config.settings import settings
 
-async def discover_mcp_tools_async(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+
+async def discover_mcp_tools_async(config_json: dict[str, Any]) -> list[dict[str, Any]]:
     """Return a list[dict] with the tool metadata advertised by the MCP server."""
 
     if settings.AI_ENGINE == "crewai":
@@ -41,20 +42,27 @@ async def discover_mcp_tools_async(config_json: Dict[str, Any]) -> List[Dict[str
 
     service = MCPService()
     tools, exit_stack = await service._connect_to_mcp_server(config_json)
-    serialised = [t.to_dict() if hasattr(t, "to_dict") else {
-        "id": t.name,
-        "name": t.name,
-        "description": getattr(t, "description", t.name),
-        "tags": getattr(t, "tags", []),
-        "examples": getattr(t, "examples", []),
-        "inputModes": getattr(t, "input_modes", ["text"]),
-        "outputModes": getattr(t, "output_modes", ["text"]),
-    } for t in tools]
+    serialised = [
+        (
+            t.to_dict()
+            if hasattr(t, "to_dict")
+            else {
+                "id": t.name,
+                "name": t.name,
+                "description": getattr(t, "description", t.name),
+                "tags": getattr(t, "tags", []),
+                "examples": getattr(t, "examples", []),
+                "inputModes": getattr(t, "input_modes", ["text"]),
+                "outputModes": getattr(t, "output_modes", ["text"]),
+            }
+        )
+        for t in tools
+    ]
     if exit_stack:
         await exit_stack.aclose()
     return serialised
 
 
-def discover_mcp_tools(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+def discover_mcp_tools(config_json: dict[str, Any]) -> list[dict[str, Any]]:
     """Sync wrapper so we can call it from a sync service function."""
     return asyncio.run(discover_mcp_tools_async(config_json))

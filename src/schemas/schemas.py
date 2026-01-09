@@ -1,15 +1,17 @@
-from pydantic import BaseModel, Field, validator, UUID4, ConfigDict
-from typing import Optional, Dict, Any, List
-from datetime import datetime
-from uuid import UUID
-import uuid
 import re
-from src.schemas.agent_config import LLMConfig, AgentConfig
+import uuid
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from pydantic import UUID4, BaseModel, ConfigDict, Field, validator
+
+from src.schemas.agent_config import LLMConfig
 
 
 class ClientBase(BaseModel):
     name: str
-    email: Optional[str] = None
+    email: str | None = None
 
     @validator("email")
     def validate_email(cls, v):
@@ -41,47 +43,41 @@ class ApiKeyCreate(ApiKeyBase):
 
 
 class ApiKeyUpdate(BaseModel):
-    name: Optional[str] = None
-    provider: Optional[str] = None
-    key_value: Optional[str] = None
-    is_active: Optional[bool] = None
+    name: str | None = None
+    provider: str | None = None
+    key_value: str | None = None
+    is_active: bool | None = None
 
 
 class ApiKey(ApiKeyBase):
     id: UUID4
     client_id: UUID4
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
     is_active: bool
-    key_value_masked: Optional[str] = Field(default="*****", description="Masked API key value for display")
+    key_value_masked: str | None = Field(
+        default="*****", description="Masked API key value for display"
+    )
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AgentBase(BaseModel):
-    name: Optional[str] = Field(
-        None, description="Agent name (no spaces or special characters)"
-    )
-    description: Optional[str] = Field(None, description="Agent description")
-    role: Optional[str] = Field(None, description="Agent role in the system")
-    goal: Optional[str] = Field(None, description="Agent goal or objective")
+    name: str | None = Field(None, description="Agent name (no spaces or special characters)")
+    description: str | None = Field(None, description="Agent description")
+    role: str | None = Field(None, description="Agent role in the system")
+    goal: str | None = Field(None, description="Agent goal or objective")
     type: str = Field(
         ...,
         description="Agent type (llm, sequential, parallel, loop, a2a, workflow, task)",
     )
-    model: Optional[str] = Field(
-        None, description="Agent model (required only for llm type)"
-    )
-    api_key_id: Optional[UUID4] = Field(
-        None, description="Reference to a stored API Key ID"
-    )
-    instruction: Optional[str] = None
-    agent_card_url: Optional[str] = Field(
+    model: str | None = Field(None, description="Agent model (required only for llm type)")
+    api_key_id: UUID4 | None = Field(None, description="Reference to a stored API Key ID")
+    instruction: str | None = None
+    agent_card_url: str | None = Field(
         None, description="Agent card URL (required for a2a type)"
     )
-    folder_id: Optional[UUID4] = Field(
-        None, description="ID of the folder this agent belongs to"
-    )
+    folder_id: UUID4 | None = Field(None, description="ID of the folder this agent belongs to")
     config: Any = Field(None, description="Agent configuration based on type")
 
     @validator("name")
@@ -145,9 +141,7 @@ class AgentBase(BaseModel):
             return v
 
         if not v and values.get("type") != "a2a":
-            raise ValueError(
-                f"Configuration is required for {values.get('type')} agent type"
-            )
+            raise ValueError(f"Configuration is required for {values.get('type')} agent type")
 
         if values["type"] == "llm":
             if isinstance(v, dict):
@@ -166,9 +160,7 @@ class AgentBase(BaseModel):
             if not isinstance(v["sub_agents"], list):
                 raise ValueError("sub_agents must be a list")
             if not v["sub_agents"]:
-                raise ValueError(
-                    f'Agent {values["type"]} must have at least one sub-agent'
-                )
+                raise ValueError(f'Agent {values["type"]} must have at least one sub-agent')
         elif values["type"] == "task":
             if not isinstance(v, dict):
                 raise ValueError(f'Invalid configuration for agent {values["type"]}')
@@ -206,19 +198,19 @@ class AgentCreate(AgentBase):
                 raise ValueError("Configuration is required for workflow agent type")
             if not isinstance(v, dict):
                 raise ValueError("Invalid configuration for workflow agent")
-            
+
             # workflow field is required but can be empty dict initially
             if "workflow" in v and v["workflow"]:
                 workflow = v["workflow"]
                 if not isinstance(workflow, dict):
                     raise ValueError("workflow must be a dictionary")
-                
+
                 # If nodes/edges are provided, they must be lists
                 if "nodes" in workflow and not isinstance(workflow["nodes"], list):
                     raise ValueError("workflow.nodes must be a list")
                 if "edges" in workflow and not isinstance(workflow["edges"], list):
                     raise ValueError("workflow.edges must be a list")
-        
+
         return v
 
 
@@ -226,10 +218,10 @@ class Agent(AgentBase):
     id: UUID
     client_id: UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
-    agent_card_url: Optional[str] = None
-    avatar_url: Optional[str] = None
-    folder_id: Optional[UUID4] = None
+    updated_at: datetime | None = None
+    agent_card_url: str | None = None
+    avatar_url: str | None = None
+    folder_id: UUID4 | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -250,19 +242,20 @@ class ToolConfig(BaseModel):
     id: str
     name: str
     description: str
-    tags: List[str] = Field(default_factory=list)
-    examples: List[str] = Field(default_factory=list)
-    inputModes: List[str] = Field(default_factory=list)
-    outputModes: List[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    examples: list[str] = Field(default_factory=list)
+    inputModes: list[str] = Field(default_factory=list)
+    outputModes: list[str] = Field(default_factory=list)
+
 
 # Last edited by Arley Peter on 2025-05-17
 class MCPServerBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
     config_type: str = Field(default="studio")
-    config_json: Dict[str, Any] = Field(default_factory=dict)
-    environments: Dict[str, Any] = Field(default_factory=dict)
-    tools: Optional[List[ToolConfig]] = Field(default_factory=list) 
+    config_json: dict[str, Any] = Field(default_factory=dict)
+    environments: dict[str, Any] = Field(default_factory=dict)
+    tools: list[ToolConfig] | None = Field(default_factory=list)
     type: str = Field(default="official")
 
 
@@ -273,16 +266,16 @@ class MCPServerCreate(MCPServerBase):
 class MCPServer(MCPServerBase):
     id: uuid.UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class ToolBase(BaseModel):
     name: str
-    description: Optional[str] = None
-    config_json: Dict[str, Any] = Field(default_factory=dict)
-    environments: Dict[str, Any] = Field(default_factory=dict)
+    description: str | None = None
+    config_json: dict[str, Any] = Field(default_factory=dict)
+    environments: dict[str, Any] = Field(default_factory=dict)
 
 
 class ToolCreate(ToolBase):
@@ -292,14 +285,14 @@ class ToolCreate(ToolBase):
 class Tool(ToolBase):
     id: uuid.UUID
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
 
 class AgentFolderBase(BaseModel):
     name: str
-    description: Optional[str] = None
+    description: str | None = None
 
 
 class AgentFolderCreate(AgentFolderBase):
@@ -314,6 +307,6 @@ class AgentFolder(AgentFolderBase):
     id: UUID4
     client_id: UUID4
     created_at: datetime
-    updated_at: Optional[datetime] = None
+    updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)

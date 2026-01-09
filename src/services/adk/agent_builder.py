@@ -1,28 +1,25 @@
-from typing import List, Optional, Tuple
+import uuid
+from contextlib import AsyncExitStack
+from datetime import datetime
+
 import litellm
-import sys
+from google.adk.agents import BaseAgent, LoopAgent, ParallelAgent, SequentialAgent
 from google.adk.agents.llm_agent import LlmAgent
-from google.adk.agents import SequentialAgent, ParallelAgent, LoopAgent, BaseAgent
 from google.adk.models.lite_llm import LiteLlm
+from google.adk.tools import load_memory
 from google.adk.tools.agent_tool import AgentTool
-from src.schemas.schemas import Agent
-from src.utils.logger import setup_logger
+from sqlalchemy.orm import Session
+
 from src.core.exceptions import AgentNotFoundError
-from src.services.agent_service import get_agent
+from src.schemas.agent_config import AgentTask
+from src.services.adk.custom_agents.a2a_agent import A2ACustomAgent
+from src.services.adk.custom_agents.task_agent import TaskAgent
+from src.services.adk.custom_agents.workflow_agent import WorkflowAgent
 from src.services.adk.custom_tools import CustomToolBuilder
 from src.services.adk.mcp_service import MCPService
-from src.services.adk.custom_agents.a2a_agent import A2ACustomAgent
-from src.services.adk.custom_agents.workflow_agent import WorkflowAgent
-from src.services.adk.custom_agents.task_agent import TaskAgent
+from src.services.agent_service import get_agent
 from src.services.apikey_service import get_decrypted_api_key
-from sqlalchemy.orm import Session
-from contextlib import AsyncExitStack
-from google.adk.tools import load_memory
-
-from datetime import datetime
-import uuid
-
-from src.schemas.agent_config import AgentTask
+from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -33,7 +30,7 @@ class AgentBuilder:
         self.custom_tool_builder = CustomToolBuilder()
         self.mcp_service = MCPService()
 
-    async def _agent_tools_builder(self, agent) -> List[AgentTool]:
+    async def _agent_tools_builder(self, agent) -> list[AgentTool]:
         """Build the tools for an agent."""
         agent_tools_ids = agent.config.get("agent_tools")
         agent_tools = []
@@ -46,8 +43,8 @@ class AgentBuilder:
         return agent_tools
 
     async def _create_llm_agent(
-        self, agent, enabled_tools: List[str] = []
-    ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
+        self, agent, enabled_tools: list[str] = []
+    ) -> tuple[LlmAgent, AsyncExitStack | None]:
         """Create an LLM agent from the agent data."""
         # Get custom tools from the configuration
         custom_tools = []
@@ -57,9 +54,7 @@ class AgentBuilder:
         mcp_tools = []
         mcp_exit_stack = None
         if agent.config.get("mcp_servers") or agent.config.get("custom_mcp_servers"):
-            mcp_tools, mcp_exit_stack = await self.mcp_service.build_tools(
-                agent.config, self.db
-            )
+            mcp_tools, mcp_exit_stack = await self.mcp_service.build_tools(agent.config, self.db)
 
         # Get agent tools
         agent_tools = await self._agent_tools_builder(agent)
@@ -88,15 +83,11 @@ class AgentBuilder:
 
         # add role on beginning of the prompt
         if agent.role:
-            formatted_prompt = (
-                f"<agent_role>{agent.role}</agent_role>\n\n{formatted_prompt}"
-            )
+            formatted_prompt = f"<agent_role>{agent.role}</agent_role>\n\n{formatted_prompt}"
 
         # add goal on beginning of the prompt
         if agent.goal:
-            formatted_prompt = (
-                f"<agent_goal>{agent.goal}</agent_goal>\n\n{formatted_prompt}"
-            )
+            formatted_prompt = f"<agent_goal>{agent.goal}</agent_goal>\n\n{formatted_prompt}"
 
         # Check if load_memory is enabled
         if agent.config.get("load_memory"):
@@ -117,9 +108,7 @@ class AgentBuilder:
                 api_key = decrypted_key
             else:
                 logger.error(f"Stored API key not found for agent {agent.name}")
-                raise ValueError(
-                    f"API key with ID {agent.api_key_id} not found or inactive"
-                )
+                raise ValueError(f"API key with ID {agent.api_key_id} not found or inactive")
         else:
             # Check if there is an API key in the config (temporary field)
             config_api_key = agent.config.get("api_key") if agent.config else None
@@ -132,7 +121,7 @@ class AgentBuilder:
                     is_valid_uuid = True
                 except (ValueError, TypeError):
                     is_valid_uuid = False
-                
+
                 if is_valid_uuid:
                     # It IS a UUID, so it MUST exist in DB
                     decrypted_key = get_decrypted_api_key(self.db, key_id)
@@ -141,28 +130,32 @@ class AgentBuilder:
                         api_key = decrypted_key
                     else:
                         # Valid UUID but not found -> ERROR
-                        logger.error(f"API key reference {config_api_key} not found in database for agent {agent.name}")
-                        raise ValueError(f"A chave de API configurada para o agente {agent.name} não foi encontrada ou está inativa.")
+                        logger.error(
+                            f"API key reference {config_api_key} not found in database for agent {agent.name}"
+                        )
+                        raise ValueError(
+                            f"A chave de API configurada para o agente {agent.name} não foi encontrada ou está inativa."
+                        )
                 else:
                     # It is NOT a UUID, use directly as a raw key
                     api_key = config_api_key
             else:
                 logger.error(f"No API key configured for agent {agent.name}")
-                raise ValueError(
-                    f"Agent {agent.name} does not have a configured API key"
-                )
+                raise ValueError(f"Agent {agent.name} does not have a configured API key")
 
         # DEBUG: Log agent creation params
         if api_key:
             masked_key = f"{str(api_key)[:7]}..."
         else:
             masked_key = "None"
-            
-        logger.info(f"Creating LiteLlm for agent {agent.name} | Model: {agent.model} | Key: {masked_key}")
-        
+
+        logger.info(
+            f"Creating LiteLlm for agent {agent.name} | Model: {agent.model} | Key: {masked_key}"
+        )
+
         # Activate logs
         litellm.set_verbose = True
-        
+
         return (
             LlmAgent(
                 name=agent.name,
@@ -175,8 +168,8 @@ class AgentBuilder:
         )
 
     async def _get_sub_agents(
-        self, sub_agent_ids: List[str]
-    ) -> List[Tuple[LlmAgent, Optional[AsyncExitStack]]]:
+        self, sub_agent_ids: list[str]
+    ) -> list[tuple[LlmAgent, AsyncExitStack | None]]:
         """Get and create LLM sub-agents."""
         sub_agents = []
         for sub_agent_id in sub_agent_ids:
@@ -216,29 +209,23 @@ class AgentBuilder:
         return sub_agents
 
     async def build_llm_agent(
-        self, root_agent, enabled_tools: List[str] = []
-    ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
+        self, root_agent, enabled_tools: list[str] = []
+    ) -> tuple[LlmAgent, AsyncExitStack | None]:
         """Build an LLM agent with its sub-agents."""
         logger.debug("Creating LLM agent")
 
         sub_agents = []
         if root_agent.config.get("sub_agents"):
-            sub_agents_with_stacks = await self._get_sub_agents(
-                root_agent.config.get("sub_agents")
-            )
+            sub_agents_with_stacks = await self._get_sub_agents(root_agent.config.get("sub_agents"))
             sub_agents = [agent for agent, _ in sub_agents_with_stacks]
 
-        root_llm_agent, exit_stack = await self._create_llm_agent(
-            root_agent, enabled_tools
-        )
+        root_llm_agent, exit_stack = await self._create_llm_agent(root_agent, enabled_tools)
         if sub_agents:
             root_llm_agent.sub_agents = sub_agents
 
         return root_llm_agent, exit_stack
 
-    async def build_a2a_agent(
-        self, root_agent
-    ) -> Tuple[BaseAgent, Optional[AsyncExitStack]]:
+    async def build_a2a_agent(self, root_agent) -> tuple[BaseAgent, AsyncExitStack | None]:
         """Build an A2A agent with its sub-agents."""
         logger.debug(f"Creating A2A agent from {root_agent.agent_card_url}")
 
@@ -260,8 +247,7 @@ class AgentBuilder:
                 name=root_agent.name,
                 agent_card_url=root_agent.agent_card_url,
                 timeout=timeout,
-                description=root_agent.description
-                or f"A2A Agent for {root_agent.name}",
+                description=root_agent.description or f"A2A Agent for {root_agent.name}",
                 sub_agents=sub_agents,
             )
 
@@ -277,7 +263,7 @@ class AgentBuilder:
 
     async def build_workflow_agent(
         self, root_agent
-    ) -> Tuple[WorkflowAgent, Optional[AsyncExitStack]]:
+    ) -> tuple[WorkflowAgent, AsyncExitStack | None]:
         """Build a workflow agent with its sub-agents."""
         logger.debug(f"Creating Workflow agent from {root_agent.name}")
 
@@ -301,8 +287,7 @@ class AgentBuilder:
                 name=root_agent.name,
                 flow_json=agent_config.get("workflow"),
                 timeout=timeout,
-                description=root_agent.description
-                or f"Workflow Agent for {root_agent.name}",
+                description=root_agent.description or f"Workflow Agent for {root_agent.name}",
                 sub_agents=sub_agents,
                 db=self.db,
             )
@@ -315,9 +300,7 @@ class AgentBuilder:
             logger.error(f"Error building Workflow agent: {str(e)}")
             raise ValueError(f"Error building Workflow agent: {str(e)}")
 
-    async def build_task_agent(
-        self, root_agent
-    ) -> Tuple[TaskAgent, Optional[AsyncExitStack]]:
+    async def build_task_agent(self, root_agent) -> tuple[TaskAgent, AsyncExitStack | None]:
         """Build a task agent with its sub-agents."""
         logger.debug(f"Creating Task agent: {root_agent.name}")
 
@@ -367,25 +350,19 @@ class AgentBuilder:
 
     async def build_composite_agent(
         self, root_agent
-    ) -> Tuple[SequentialAgent | ParallelAgent | LoopAgent, Optional[AsyncExitStack]]:
+    ) -> tuple[SequentialAgent | ParallelAgent | LoopAgent, AsyncExitStack | None]:
         """Build a composite agent (Sequential, Parallel or Loop) with its sub-agents."""
         logger.debug(
             f"Processing sub-agents for agent {root_agent.type} (ID: {root_agent.id}, Name: {root_agent.name})"
         )
 
         if not root_agent.config.get("sub_agents"):
-            logger.error(
-                f"Sub_agents configuration not found or empty for agent {root_agent.name}"
-            )
+            logger.error(f"Sub_agents configuration not found or empty for agent {root_agent.name}")
             raise ValueError(f"Missing sub_agents configuration for {root_agent.name}")
 
-        logger.debug(
-            f"Sub-agents IDs to be processed: {root_agent.config.get('sub_agents', [])}"
-        )
+        logger.debug(f"Sub-agents IDs to be processed: {root_agent.config.get('sub_agents', [])}")
 
-        sub_agents_with_stacks = await self._get_sub_agents(
-            root_agent.config.get("sub_agents", [])
-        )
+        sub_agents_with_stacks = await self._get_sub_agents(root_agent.config.get("sub_agents", []))
 
         logger.debug(
             f"Sub-agents processed: {len(sub_agents_with_stacks)} of {len(root_agent.config.get('sub_agents', []))}"
@@ -434,7 +411,7 @@ class AgentBuilder:
         else:
             raise ValueError(f"Invalid agent type: {root_agent.type}")
 
-    async def build_agent(self, root_agent, enabled_tools: List[str] = []) -> Tuple[
+    async def build_agent(self, root_agent, enabled_tools: list[str] = []) -> tuple[
         LlmAgent
         | SequentialAgent
         | ParallelAgent
@@ -442,7 +419,7 @@ class AgentBuilder:
         | A2ACustomAgent
         | WorkflowAgent
         | TaskAgent,
-        Optional[AsyncExitStack],
+        AsyncExitStack | None,
     ]:
         """Build the appropriate agent based on the type of the root agent."""
         if root_agent.type == "llm":

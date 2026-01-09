@@ -1,21 +1,43 @@
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Any
 from uuid import uuid4
 
 try:
     from a2a.types import (
-        AgentCard as SDKAgentCard,
         AgentCapabilities as SDKAgentCapabilities,
-        AgentSkill as SDKAgentSkill,
+    )
+    from a2a.types import (
+        AgentCard as SDKAgentCard,
+    )
+    from a2a.types import (
         AgentProvider as SDKAgentProvider,
-        Message as SDKMessage,
-        Task as SDKTask,
-        TaskStatus as SDKTaskStatus,
-        TaskState as SDKTaskState,
-        Part as SDKPart,
-        TextPart as SDKTextPart,
-        FilePart as SDKFilePart,
+    )
+    from a2a.types import (
+        AgentSkill as SDKAgentSkill,
+    )
+    from a2a.types import (
         Artifact as SDKArtifact,
+    )
+    from a2a.types import (
+        FilePart as SDKFilePart,
+    )
+    from a2a.types import (
+        Message as SDKMessage,
+    )
+    from a2a.types import (
+        Part as SDKPart,
+    )
+    from a2a.types import (
+        Task as SDKTask,
+    )
+    from a2a.types import (
+        TaskState as SDKTaskState,
+    )
+    from a2a.types import (
+        TaskStatus as SDKTaskStatus,
+    )
+    from a2a.types import (
+        TextPart as SDKTextPart,
     )
 
     SDK_AVAILABLE = True
@@ -24,15 +46,22 @@ except ImportError:
     logging.warning("a2a-sdk not available, falling back to custom types")
 
 from src.schemas.a2a_types import (
-    Task as CustomTask,
-    TaskStatus as CustomTaskStatus,
-    TaskState as CustomTaskState,
-    Message as CustomMessage,
     AgentCard as CustomAgentCard,
-    AgentCapabilities as CustomAgentCapabilities,
-    AgentSkill as CustomAgentSkill,
-    AgentProvider as CustomAgentProvider,
+)
+from src.schemas.a2a_types import (
     Artifact as CustomArtifact,
+)
+from src.schemas.a2a_types import (
+    Message as CustomMessage,
+)
+from src.schemas.a2a_types import (
+    Task as CustomTask,
+)
+from src.schemas.a2a_types import (
+    TaskState as CustomTaskState,
+)
+from src.schemas.a2a_types import (
+    TaskStatus as CustomTaskStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -47,7 +76,7 @@ class A2ATypeValidator:
         return SDK_AVAILABLE
 
     @staticmethod
-    def validate_agent_card(card_data: Dict[str, Any]) -> Optional[Any]:
+    def validate_agent_card(card_data: dict[str, Any]) -> Any | None:
         """Validate agent card using SDK types if available"""
         if not SDK_AVAILABLE:
             logger.debug("SDK not available, using custom validation")
@@ -60,7 +89,7 @@ class A2ATypeValidator:
             return CustomAgentCard(**card_data)
 
     @staticmethod
-    def validate_message(message_data: Dict[str, Any]) -> Optional[Any]:
+    def validate_message(message_data: dict[str, Any]) -> Any | None:
         """Validate message using SDK types if available"""
         if not SDK_AVAILABLE:
             return CustomMessage(**message_data)
@@ -72,7 +101,7 @@ class A2ATypeValidator:
             return CustomMessage(**message_data)
 
     @staticmethod
-    def validate_task(task_data: Dict[str, Any]) -> Optional[Any]:
+    def validate_task(task_data: dict[str, Any]) -> Any | None:
         """Validate task using SDK types if available"""
         if not SDK_AVAILABLE:
             return CustomTask(**task_data)
@@ -88,7 +117,7 @@ class A2ATypeConverter:
     """Convert between custom and SDK types"""
 
     @staticmethod
-    def custom_task_to_sdk(custom_task: CustomTask) -> Optional[Any]:
+    def custom_task_to_sdk(custom_task: CustomTask) -> Any | None:
         """Convert CustomTask to SDKTask"""
         if not SDK_AVAILABLE:
             return custom_task
@@ -97,15 +126,11 @@ class A2ATypeConverter:
             # Convert status
             sdk_status = None
             if custom_task.status:
-                sdk_status = A2ATypeConverter.custom_task_status_to_sdk(
-                    custom_task.status
-                )
+                sdk_status = A2ATypeConverter.custom_task_status_to_sdk(custom_task.status)
 
             # If status is None, create a basic status
             if not sdk_status:
-                sdk_status = SDKTaskStatus(
-                    state=SDKTaskState.unknown, message=None, timestamp=None
-                )
+                sdk_status = SDKTaskStatus(state=SDKTaskState.unknown, message=None, timestamp=None)
 
             # Convert artifacts
             sdk_artifacts = []
@@ -137,7 +162,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def sdk_task_to_custom(sdk_task) -> Optional[CustomTask]:
+    def sdk_task_to_custom(sdk_task) -> CustomTask | None:
         """Convert SDKTask to CustomTask"""
         if not SDK_AVAILABLE:
             return sdk_task
@@ -175,7 +200,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def custom_task_status_to_sdk(custom_status: CustomTaskStatus) -> Optional[Any]:
+    def custom_task_status_to_sdk(custom_status: CustomTaskStatus) -> Any | None:
         """Convert CustomTaskStatus to SDKTaskStatus"""
         if not SDK_AVAILABLE:
             return custom_status
@@ -197,24 +222,20 @@ class A2ATypeConverter:
             # Convert message if exists
             sdk_message = None
             if custom_status.message:
-                sdk_message = A2ATypeConverter.custom_message_to_sdk(
-                    custom_status.message
-                )
+                sdk_message = A2ATypeConverter.custom_message_to_sdk(custom_status.message)
 
             # Convert timestamp to string if it's a datetime
             timestamp_str = custom_status.timestamp
             if hasattr(custom_status.timestamp, "isoformat"):
                 timestamp_str = custom_status.timestamp.isoformat()
 
-            return SDKTaskStatus(
-                state=sdk_state, message=sdk_message, timestamp=timestamp_str
-            )
+            return SDKTaskStatus(state=sdk_state, message=sdk_message, timestamp=timestamp_str)
         except Exception as e:
             logger.error(f"Failed to convert task status: {e}")
             return None
 
     @staticmethod
-    def sdk_task_status_to_custom(sdk_status) -> Optional[CustomTaskStatus]:
+    def sdk_task_status_to_custom(sdk_status) -> CustomTaskStatus | None:
         """Convert SDKTaskStatus to CustomTaskStatus"""
         if not SDK_AVAILABLE:
             return sdk_status
@@ -236,9 +257,7 @@ class A2ATypeConverter:
             # Convert message if exists
             custom_message = None
             if sdk_status.message:
-                custom_message = A2ATypeConverter.sdk_message_to_custom(
-                    sdk_status.message
-                )
+                custom_message = A2ATypeConverter.sdk_message_to_custom(sdk_status.message)
 
             return CustomTaskStatus(
                 state=custom_state,
@@ -250,7 +269,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def custom_message_to_sdk(custom_message: CustomMessage) -> Optional[Any]:
+    def custom_message_to_sdk(custom_message: CustomMessage) -> Any | None:
         """Convert CustomMessage to SDKMessage"""
         if not SDK_AVAILABLE:
             return custom_message
@@ -288,7 +307,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def sdk_message_to_custom(sdk_message) -> Optional[CustomMessage]:
+    def sdk_message_to_custom(sdk_message) -> CustomMessage | None:
         """Convert SDKMessage to CustomMessage"""
         if not SDK_AVAILABLE:
             logger.info("SDK not available, returning original message")
@@ -297,12 +316,8 @@ class A2ATypeConverter:
         try:
             logger.info(f"Converting SDK message to custom: {type(sdk_message)}")
             logger.info(f"SDK message role: {getattr(sdk_message, 'role', 'NO_ROLE')}")
-            logger.info(
-                f"SDK message parts: {getattr(sdk_message, 'parts', 'NO_PARTS')}"
-            )
-            logger.info(
-                f"SDK message parts length: {len(getattr(sdk_message, 'parts', []))}"
-            )
+            logger.info(f"SDK message parts: {getattr(sdk_message, 'parts', 'NO_PARTS')}")
+            logger.info(f"SDK message parts length: {len(getattr(sdk_message, 'parts', []))}")
 
             # Convert parts back
             custom_parts = []
@@ -402,7 +417,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def custom_artifact_to_sdk(custom_artifact: CustomArtifact) -> Optional[Any]:
+    def custom_artifact_to_sdk(custom_artifact: CustomArtifact) -> Any | None:
         """Convert CustomArtifact to SDKArtifact"""
         if not SDK_AVAILABLE:
             return custom_artifact
@@ -464,7 +479,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def sdk_artifact_to_custom(sdk_artifact) -> Optional[CustomArtifact]:
+    def sdk_artifact_to_custom(sdk_artifact) -> CustomArtifact | None:
         """Convert SDKArtifact to CustomArtifact"""
         if not SDK_AVAILABLE:
             return sdk_artifact
@@ -484,7 +499,7 @@ class A2ATypeConverter:
             return None
 
     @staticmethod
-    def custom_agent_card_to_sdk(custom_card: CustomAgentCard) -> Optional[Any]:
+    def custom_agent_card_to_sdk(custom_card: CustomAgentCard) -> Any | None:
         """Convert CustomAgentCard to SDKAgentCard"""
         if not SDK_AVAILABLE:
             return custom_card
@@ -541,7 +556,7 @@ class A2ATypeConverter:
 
 
 # Utility functions to facilitate usage
-def validate_with_sdk(data: Dict[str, Any], data_type: str) -> Any:
+def validate_with_sdk(data: dict[str, Any], data_type: str) -> Any:
     """Utility function to validate data with SDK when available"""
     validator = A2ATypeValidator()
 

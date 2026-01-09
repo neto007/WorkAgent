@@ -1,8 +1,7 @@
 from datetime import datetime
 from enum import Enum
-from typing import Annotated, Any, Literal, Union, Dict, List, Optional
+from typing import Annotated, Any, Literal, Self
 from uuid import uuid4
-from typing_extensions import Self
 
 from pydantic import (
     BaseModel,
@@ -41,9 +40,7 @@ class FileContent(BaseModel):
         if not (self.bytes or self.uri):
             raise ValueError("Either 'bytes' or 'uri' must be present in the file data")
         if self.bytes and self.uri:
-            raise ValueError(
-                "Only one of 'bytes' or 'uri' can be present in the file data"
-            )
+            raise ValueError("Only one of 'bytes' or 'uri' can be present in the file data")
         return self
 
 

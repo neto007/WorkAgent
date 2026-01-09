@@ -2,34 +2,39 @@ import os
 import sys
 import warnings
 from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from src.config.database import engine, Base
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+from src.config.database import Base, engine
 from src.config.settings import settings
 from src.utils.logger import setup_logger
 from src.utils.otel import init_otel
-from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 
 # Suppress WebSocket deprecation warning
-warnings.filterwarnings("ignore", message="remove second argument of ws_handler", category=DeprecationWarning)
+warnings.filterwarnings(
+    "ignore", message="remove second argument of ws_handler", category=DeprecationWarning
+)
 
 # Necessary for other modules
-from src.services.service_providers import session_service  # noqa: F401
-from src.services.service_providers import artifacts_service  # noqa: F401
-from src.services.service_providers import memory_service  # noqa: F401
-
-import src.api.auth_routes
-import src.api.admin_routes
-import src.api.chat_routes
-import src.api.session_routes
-import src.api.agent_routes
-import src.api.mcp_server_routes
-import src.api.tool_routes
-import src.api.client_routes
 import src.api.a2a_routes
-import src.api.upload_routes
+import src.api.admin_routes
+import src.api.agent_routes
+import src.api.auth_routes
+import src.api.chat_routes
+import src.api.client_routes
 import src.api.client_users_routes
+import src.api.mcp_server_routes
+import src.api.session_routes
+import src.api.tool_routes
+import src.api.upload_routes
+from src.services.service_providers import (
+    artifacts_service,  # noqa: F401
+    memory_service,  # noqa: F401
+    session_service,  # noqa: F401
+)
 
 # Add the root directory to PYTHONPATH
 root_dir = Path(__file__).parent.parent

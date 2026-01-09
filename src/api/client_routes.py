@@ -1,26 +1,27 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
-from pydantic import BaseModel, EmailStr
-from sqlalchemy.orm import Session
-from src.config.database import get_db
-from typing import List
+import logging
 import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+
+from src.config.database import get_db
 from src.core.jwt_middleware import (
-    get_jwt_token,
-    verify_user_client,
-    verify_admin,
     get_current_user_client_id,
+    get_jwt_token,
+    verify_admin,
     verify_role,
+    verify_user_client,
 )
 from src.schemas.schemas import (
     Client,
     ClientCreate,
 )
-from src.schemas.user import UserCreate, TokenResponse
+from src.schemas.user import TokenResponse, UserCreate
 from src.services import (
     client_service,
 )
 from src.services.auth_service import create_access_token
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -72,7 +73,7 @@ async def create_user(
     return client_obj
 
 
-@router.get("/", response_model=List[Client])
+@router.get("/", response_model=list[Client])
 async def read_clients(
     skip: int = 0,
     limit: int = 100,
@@ -103,9 +104,7 @@ async def read_client(
 
     db_client = client_service.get_client(db, client_id)
     if db_client is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     return db_client
 
 
@@ -122,9 +121,7 @@ async def update_client(
 
     db_client = client_service.update_client(db, client_id, client)
     if db_client is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
     return db_client
 
 
@@ -138,9 +135,7 @@ async def delete_client(
     await verify_admin(payload)
 
     if not client_service.delete_client(db, client_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
 
 @router.post("/{client_id}/impersonate", response_model=TokenResponse)
@@ -167,12 +162,13 @@ async def impersonate_client(
     """
     # Verify if the user is an administrator
     await verify_admin(payload)
-    
+
     # Get current admin user ID
-    admin_user_id = payload.get('sub')
-    
+    admin_user_id = payload.get("sub")
+
     # Query admin user directly to create backup token
     from src.models.models import User
+
     # Payload sub contains email, not UUID
     admin_user = db.query(User).filter(User.email == admin_user_id).first()
     if admin_user:
@@ -186,7 +182,7 @@ async def impersonate_client(
             secure=False,
             samesite="lax",
             max_age=60 * 60 * 24 * 7,  # 7 days
-            path="/"
+            path="/",
         )
     else:
         logger.error(f"FAILED to find admin user for backup token: {admin_user_id}")
@@ -194,9 +190,7 @@ async def impersonate_client(
     # Search for the client
     client = client_service.get_client(db, client_id)
     if not client:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Client not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Client not found")
 
     user = client_service.get_client_user(db, client_id)
     if not user:
@@ -215,7 +209,7 @@ async def impersonate_client(
         secure=False,
         samesite="lax",
         max_age=60 * 60 * 24 * 7,  # 7 days
-        path="/"
+        path="/",
     )
 
     logger.info(
@@ -232,28 +226,27 @@ async def exit_impersonation(
 ):
     """
     Exit impersonation and restore admin session
-    
+
     Swaps the client token for the backed-up admin token
     """
     # Debug: Print all cookies
     logger.info(f"Exit impersonation cookies received: {request.cookies.keys()}")
-    
+
     # Read admin backup token from cookies
     admin_backup_token = request.cookies.get("admin_backup_token")
-    
+
     if not admin_backup_token:
         logger.warning("No admin backup token found when trying to exit impersonation")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="No admin session to restore"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="No admin session to restore"
         )
-    
+
     logger.info("Found admin_backup_token, restoring session...")
-    
+
     # Clear client token and backup
     # response.delete_cookie(key="access_token", path="/") # Redundant if we overwrite
     response.delete_cookie(key="admin_backup_token", path="/")
-    
+
     # Restore admin token
     response.set_cookie(
         key="access_token",
@@ -262,9 +255,9 @@ async def exit_impersonation(
         secure=False,
         samesite="lax",
         max_age=60 * 60 * 24 * 7,  # 7 days
-        path="/"
+        path="/",
     )
-    
+
     logger.info("Admin exited impersonation and session restored")
-    
+
     return {"message": "Admin session restored successfully"}

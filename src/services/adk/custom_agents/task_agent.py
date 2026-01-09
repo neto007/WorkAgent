@@ -1,15 +1,13 @@
-from attr import Factory
+from collections.abc import AsyncGenerator
+
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
 from google.genai.types import Content, Part
-from src.services.agent_service import get_agent
-
 from sqlalchemy.orm import Session
 
-from typing import AsyncGenerator, List
-
 from src.schemas.agent_config import AgentTask
+from src.services.agent_service import get_agent
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -23,15 +21,15 @@ class TaskAgent(BaseAgent):
     """
 
     # Field declarations for Pydantic
-    tasks: List[AgentTask]
+    tasks: list[AgentTask]
     db: Session
 
     def __init__(
         self,
         name: str,
-        tasks: List[AgentTask],
+        tasks: list[AgentTask],
         db: Session,
-        sub_agents: List[BaseAgent] = [],
+        sub_agents: list[BaseAgent] = [],
         **kwargs,
     ):
         """
@@ -52,9 +50,7 @@ class TaskAgent(BaseAgent):
             **kwargs,
         )
 
-    async def _run_async_impl(
-        self, ctx: InvocationContext
-    ) -> AsyncGenerator[Event, None]:
+    async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         """
         Implementation of the Task agent.
 
@@ -140,9 +136,7 @@ class TaskAgent(BaseAgent):
 
                 logger.debug(f"Building agent in Task agent: {agent.name}")
                 agent_builder = AgentBuilder(self.db)
-                root_agent, exit_stack = await agent_builder.build_agent(
-                    agent, task.enabled_tools
-                )
+                root_agent, exit_stack = await agent_builder.build_agent(agent, task.enabled_tools)
 
                 # Store task instructions in context for reference by sub-agents
                 ctx.session.state["task_instructions"] = task_message_instructions

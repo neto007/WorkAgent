@@ -1,19 +1,18 @@
 import base64
 import uuid
-from typing import Dict, List, Any, Optional
-from google.genai.types import Part, Blob
+from typing import Any
+
+from google.genai.types import Blob, Part
 
 from src.schemas.a2a_types import (
     ContentTypeNotSupportedError,
     JSONRPCResponse,
-    UnsupportedOperationError,
     Message,
+    UnsupportedOperationError,
 )
 
 
-def are_modalities_compatible(
-    server_output_modes: list[str], client_output_modes: list[str]
-):
+def are_modalities_compatible(server_output_modes: list[str], client_output_modes: list[str]):
     """Modalities are compatible if they are both non-empty
     and there is at least one common element.
     """
@@ -34,7 +33,7 @@ def new_not_implemented_error(request_id):
     return JSONRPCResponse(id=request_id, error=UnsupportedOperationError())
 
 
-def extract_files_from_message(message: Message) -> List[Dict[str, Any]]:
+def extract_files_from_message(message: Message) -> list[dict[str, Any]]:
     """
     Extract file parts from an A2A message.
 
@@ -55,7 +54,7 @@ def extract_files_from_message(message: Message) -> List[Dict[str, Any]]:
     return files
 
 
-def a2a_part_to_adk_part(a2a_part: Dict[str, Any]) -> Optional[Part]:
+def a2a_part_to_adk_part(a2a_part: dict[str, Any]) -> Part | None:
     """
     Convert an A2A protocol part to an ADK Part object.
 
@@ -86,8 +85,8 @@ def a2a_part_to_adk_part(a2a_part: Dict[str, Any]) -> Optional[Part]:
 
 
 def adk_part_to_a2a_part(
-    adk_part: Part, filename: Optional[str] = None
-) -> Optional[Dict[str, Any]]:
+    adk_part: Part, filename: str | None = None
+) -> dict[str, Any] | None:
     """
     Convert an ADK Part object to an A2A protocol part.
 

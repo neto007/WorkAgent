@@ -1,29 +1,36 @@
 import logging
-import asyncio
-from typing import Dict, Any, Optional
+from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy.orm import Session
 
 try:
     from a2a.server.agent_execution import AgentExecutor, RequestContext
-    from a2a.server.events import EventQueue
-    from a2a.server.tasks import TaskStore, InMemoryTaskStore
-    from a2a.server.request_handlers import DefaultRequestHandler
     from a2a.server.apps import A2AStarletteApplication
+    from a2a.server.events import EventQueue
+    from a2a.server.request_handlers import DefaultRequestHandler
+    from a2a.server.tasks import InMemoryTaskStore, TaskStore
     from a2a.types import (
-        AgentCard,
         AgentCapabilities,
-        AgentSkill,
+        AgentCard,
         AgentProvider,
-        Task as SDKTask,
-        TaskState as SDKTaskState,
-        TaskStatus as SDKTaskStatus,
-        Message as SDKMessage,
-        TaskStatusUpdateEvent,
+        AgentSkill,
         TaskArtifactUpdateEvent,
+        TaskStatusUpdateEvent,
     )
-    from a2a.utils import new_agent_text_message, completed_task
+    from a2a.types import (
+        Message as SDKMessage,
+    )
+    from a2a.types import (
+        Task as SDKTask,
+    )
+    from a2a.types import (
+        TaskState as SDKTaskState,
+    )
+    from a2a.types import (
+        TaskStatus as SDKTaskStatus,
+    )
+    from a2a.utils import completed_task, new_agent_text_message
 
     SDK_AVAILABLE = True
 except ImportError:
@@ -31,22 +38,11 @@ except ImportError:
     logging.warning("a2a-sdk not available for adapter")
 
 from src.config.settings import settings
-from src.services.agent_service import get_agent
-from src.services.mcp_server_service import get_mcp_server
-from src.services.a2a_task_manager import A2ATaskManager, A2AService
-from src.schemas.a2a_types import (
-    SendTaskRequest,
-    SendTaskStreamingRequest,
-    CancelTaskRequest,
-    TaskSendParams,
-    TaskState as CustomTaskState,
-    TaskStatus as CustomTaskStatus,
-)
 from src.schemas.a2a_enhanced_types import (
-    A2ATypeConverter,
     convert_to_sdk_format,
-    convert_from_sdk_format,
 )
+from src.services.a2a_task_manager import A2AService, A2ATaskManager
+from src.services.agent_service import get_agent
 
 logger = logging.getLogger(__name__)
 
@@ -63,9 +59,7 @@ class EvoAIAgentExecutor:
         self.db = db
         self.agent_id = agent_id
 
-    async def execute(
-        self, context: "RequestContext", event_queue: "EventQueue"
-    ) -> None:
+    async def execute(self, context: "RequestContext", event_queue: "EventQueue") -> None:
         """
         Direct implementation of message execution using agent_runner.
 
@@ -99,9 +93,9 @@ class EvoAIAgentExecutor:
 
             # Import services needed
             from src.services.service_providers import (
-                session_service,
                 artifacts_service,
                 memory_service,
+                session_service,
             )
 
             # Call agent_runner directly (without task manager)
@@ -141,7 +135,7 @@ class EvoAIAgentExecutor:
     def _extract_text_from_message(self, message) -> str:
         """Extract text from SDK message."""
         try:
-            logger.info(f"🔍 DEBUG MESSAGE STRUCTURE:")
+            logger.info("🔍 DEBUG MESSAGE STRUCTURE:")
             logger.info(f"Message type: {type(message)}")
             logger.info(f"Message: {message}")
             logger.info(f"Message hasattr parts: {hasattr(message, 'parts')}")
@@ -149,9 +143,7 @@ class EvoAIAgentExecutor:
             if hasattr(message, "parts"):
                 logger.info(f"Parts: {message.parts}")
                 logger.info(f"Parts type: {type(message.parts)}")
-                logger.info(
-                    f"Parts length: {len(message.parts) if message.parts else 0}"
-                )
+                logger.info(f"Parts length: {len(message.parts) if message.parts else 0}")
 
                 if message.parts:
                     for i, part in enumerate(message.parts):
@@ -188,9 +180,7 @@ class EvoAIAgentExecutor:
         except Exception as e:
             logger.error(f"Error emitting error event: {e}")
 
-    async def cancel(
-        self, context: "RequestContext", event_queue: "EventQueue"
-    ) -> None:
+    async def cancel(self, context: "RequestContext", event_queue: "EventQueue") -> None:
         """Implement cancellation (basic for now)."""
         logger.info(f"Cancel called for agent {self.agent_id}")
         # For now, only log - implement real cancellation if needed
@@ -203,9 +193,9 @@ class EvoAISDKService:
 
     def __init__(self, db: Session):
         self.db = db
-        self.servers: Dict[str, Any] = {}
+        self.servers: dict[str, Any] = {}
 
-    def create_a2a_server(self, agent_id: UUID) -> Optional[Any]:
+    def create_a2a_server(self, agent_id: UUID) -> Any | None:
         """
         Create an A2A server using the official SDK but with internal logic.
         """
@@ -251,9 +241,7 @@ class EvoAISDKService:
 
             # Create Starlette application
             logger.info("🏗️ Creating Starlette application...")
-            server = A2AStarletteApplication(
-                agent_card=agent_card, http_handler=request_handler
-            )
+            server = A2AStarletteApplication(agent_card=agent_card, http_handler=request_handler)
             logger.info("✅ Starlette application created")
 
             # Store server
@@ -274,7 +262,7 @@ class EvoAISDKService:
             logger.error("=" * 80)
             return None
 
-    def get_server(self, agent_id: UUID) -> Optional[Any]:
+    def get_server(self, agent_id: UUID) -> Any | None:
         """
         Returns existing server or creates a new one.
         """
@@ -326,7 +314,7 @@ class EvoAISDKService:
             return True
         return False
 
-    def list_servers(self) -> Dict[str, Dict[str, Any]]:
+    def list_servers(self) -> dict[str, dict[str, Any]]:
         """
         List all active servers.
         """
@@ -341,7 +329,7 @@ class EvoAISDKService:
 
 
 # Utility function to create SDK server easily
-def create_a2a_sdk_server(db: Session, agent_id: UUID) -> Optional[Any]:
+def create_a2a_sdk_server(db: Session, agent_id: UUID) -> Any | None:
     """
     Utility function to create A2A server using SDK.
     """
@@ -350,15 +338,13 @@ def create_a2a_sdk_server(db: Session, agent_id: UUID) -> Optional[Any]:
 
 
 # Function to check compatibility
-def check_sdk_compatibility() -> Dict[str, Any]:
+def check_sdk_compatibility() -> dict[str, Any]:
     """
     Check compatibility and available features of the SDK.
     """
     return {
         "sdk_available": SDK_AVAILABLE,
-        "version": (
-            getattr(settings, "A2A_SDK_VERSION", "unknown") if SDK_AVAILABLE else None
-        ),
+        "version": (getattr(settings, "A2A_SDK_VERSION", "unknown") if SDK_AVAILABLE else None),
         "features": {
             "streaming": SDK_AVAILABLE,
             "task_management": SDK_AVAILABLE,

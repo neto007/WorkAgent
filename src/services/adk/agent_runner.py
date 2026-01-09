@@ -1,19 +1,21 @@
-from google.adk.runners import Runner
-from google.genai.types import Content, Part, Blob
-from google.adk.sessions import DatabaseSessionService
-from google.adk.memory import InMemoryMemoryService
-from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
-from src.utils.logger import setup_logger
-from src.core.exceptions import AgentNotFoundError, InternalServerError
-from src.services.agent_service import get_agent
-from src.services.adk.agent_builder import AgentBuilder
-from sqlalchemy.orm import Session
-from typing import Optional, AsyncGenerator
 import asyncio
-import json
-from src.utils.otel import get_tracer
-from opentelemetry import trace
 import base64
+import json
+from collections.abc import AsyncGenerator
+
+from google.adk.artifacts.in_memory_artifact_service import InMemoryArtifactService
+from google.adk.memory import InMemoryMemoryService
+from google.adk.runners import Runner
+from google.adk.sessions import DatabaseSessionService
+from google.genai.types import Blob, Content, Part
+from opentelemetry import trace
+from sqlalchemy.orm import Session
+
+from src.core.exceptions import AgentNotFoundError, InternalServerError
+from src.services.adk.agent_builder import AgentBuilder
+from src.services.agent_service import get_agent
+from src.utils.logger import setup_logger
+from src.utils.otel import get_tracer
 
 logger = setup_logger(__name__)
 
@@ -26,9 +28,9 @@ async def run_agent(
     artifacts_service: InMemoryArtifactService,
     memory_service: InMemoryMemoryService,
     db: Session,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     timeout: float = 3600.0,
-    files: Optional[list] = None,
+    files: list | None = None,
 ):
     tracer = get_tracer()
     with tracer.start_as_current_span(
@@ -43,18 +45,14 @@ async def run_agent(
     ):
         exit_stack = None
         try:
-            logger.info(
-                f"Starting execution of agent {agent_id} for external_id {external_id}"
-            )
+            logger.info(f"Starting execution of agent {agent_id} for external_id {external_id}")
             logger.debug(f"Received message: {message}")
 
             if files and len(files) > 0:
                 logger.info(f"Received {len(files)} files with message")
 
             get_root_agent = get_agent(db, agent_id)
-            logger.debug(
-                f"Root agent found: {get_root_agent.name} (type: {get_root_agent.type})"
-            )
+            logger.debug(f"Root agent found: {get_root_agent.name} (type: {get_root_agent.type})")
 
             if get_root_agent is None:
                 raise AgentNotFoundError(f"Agent with ID {agent_id} not found")
@@ -103,23 +101,15 @@ async def run_agent(
 
                         try:
                             file_part = Part(
-                                inline_data=Blob(
-                                    mime_type=file_data.content_type, data=file_bytes
-                                )
+                                inline_data=Blob(mime_type=file_data.content_type, data=file_bytes)
                             )
-                            logger.debug(f"Part created successfully")
+                            logger.debug("Part created successfully")
                         except Exception as part_error:
-                            logger.error(
-                                f"DEBUG - Error creating Part: {str(part_error)}"
-                            )
-                            logger.error(
-                                f"DEBUG - Error type: {type(part_error).__name__}"
-                            )
+                            logger.error(f"DEBUG - Error creating Part: {str(part_error)}")
+                            logger.error(f"DEBUG - Error type: {type(part_error).__name__}")
                             import traceback
 
-                            logger.error(
-                                f"DEBUG - Stack trace: {traceback.format_exc()}"
-                            )
+                            logger.error(f"DEBUG - Stack trace: {traceback.format_exc()}")
                             raise
 
                         # Save the file in the ArtifactService
@@ -130,16 +120,12 @@ async def run_agent(
                             filename=file_data.filename,
                             artifact=file_part,
                         )
-                        logger.info(
-                            f"Saved file {file_data.filename} as version {version}"
-                        )
+                        logger.info(f"Saved file {file_data.filename} as version {version}")
 
                         # Add the Part to the list of parts for the message content
                         file_parts.append(file_part)
                     except Exception as e:
-                        logger.error(
-                            f"Error processing file {file_data.filename}: {str(e)}"
-                        )
+                        logger.error(f"Error processing file {file_data.filename}: {str(e)}")
 
             # Create the content with the text message and the files
             parts = [Part(text=message)]
@@ -191,9 +177,7 @@ async def run_agent(
                         if last_response:
                             await response_queue.put(last_response)
                         else:
-                            await response_queue.put(
-                                "Finished without specific response"
-                            )
+                            await response_queue.put("Finished without specific response")
 
                         execution_completed.set()
                     except Exception as e:
@@ -211,12 +195,8 @@ async def run_agent(
                         p.cancel()
 
                     if not execution_completed.is_set():
-                        logger.warning(
-                            f"Agent execution timed out after {timeout} seconds"
-                        )
-                        await response_queue.put(
-                            "The response took too long and was interrupted."
-                        )
+                        logger.warning(f"Agent execution timed out after {timeout} seconds")
+                        await response_queue.put("The response took too long and was interrupted.")
 
                     final_response_text = await response_queue.get()
 
@@ -285,35 +265,36 @@ class EventAggregator:
     Aggregates streaming events to prevent token-by-token flooding.
     Uses time-based debouncing AND enforces stable message IDs for consecutive updates.
     """
+
     def __init__(self, buffer_time_ms: float = 200):
         self.buffer_time = buffer_time_ms / 1000  # Convert to seconds
         self.last_yield_time = 0
         self.events_buffer = []
-        
+
         # Stable ID tracking
         self.current_message_id = None
         self.last_author = None
         self.last_role = None
-        
+
     def add_event(self, event_dict: dict):
         """Add event to buffer, ensuring stable ID for continuous streams"""
         import uuid
-        
+
         # Extract metadata to determine continuity
         author = event_dict.get("author")
         content = event_dict.get("content", {})
         role = content.get("role") if isinstance(content, dict) else None
-        
+
         # Check if this is a continuation of the previous message stream
         # A2A agents often stream "Thinking..." then "Thinking... X" then "Tool Call"
         # We want to keep the same ID for the same "Logical Step".
         # If author and role match, it's likely the same stream.
         is_continuation = (
-            self.current_message_id is not None and
-            author == self.last_author and
-            role == self.last_role
+            self.current_message_id is not None
+            and author == self.last_author
+            and role == self.last_role
         )
-        
+
         if is_continuation:
             # Reuse the existing stable ID
             event_dict["id"] = self.current_message_id
@@ -324,39 +305,39 @@ class EventAggregator:
             # OR as an update to the current message (if we kept ID).
             # But here we WANT to update the current message IF it's a continuation.
             # If it's NOT a continuation, we generate a new ID.
-            
+
             # If the original event had no ID (common in some streams), we generate one.
             # If it HAD an ID, we override it to our stable ID to ensure continuity.
-            
-            if "id" not in event_dict or True: # Force stable ID generation
+
+            if "id" not in event_dict or True:  # Force stable ID generation
                 event_dict["id"] = str(uuid.uuid4())
-                
+
             self.current_message_id = event_dict["id"]
             self.last_author = author
             self.last_role = role
-            
+
         self.events_buffer.append(event_dict)
-    
+
     def should_yield(self) -> bool:
         """Determine if enough time has passed to yield"""
         import time
-        
+
         if not self.events_buffer:
             return False
-            
+
         current_time = time.time()
         time_since_last = current_time - self.last_yield_time
-        
+
         # Yield if buffer time has passed
         return time_since_last >= self.buffer_time
-    
+
     def get_latest_event(self) -> dict:
         """Get the most recent event from buffer and clear it"""
         import time
-        
+
         if not self.events_buffer:
             return None
-            
+
         # Return the last (most complete) event
         latest = self.events_buffer[-1]
         self.events_buffer = []
@@ -372,8 +353,8 @@ async def run_agent_stream(
     artifacts_service: InMemoryArtifactService,
     memory_service: InMemoryMemoryService,
     db: Session,
-    session_id: Optional[str] = None,
-    files: Optional[list] = None,
+    session_id: str | None = None,
+    files: list | None = None,
 ) -> AsyncGenerator[str, None]:
     tracer = get_tracer()
     span = tracer.start_span(
@@ -446,13 +427,9 @@ async def run_agent_stream(
 
                             # Detailed debug
                             # Detailed debug
-                            logger.debug(
-                                f"Processing file: {file_data.filename}"
-                            )
+                            logger.debug(f"Processing file: {file_data.filename}")
                             logger.debug(f"File size: {len(file_bytes)} bytes")
-                            logger.debug(
-                                f"MIME type: '{file_data.content_type}'"
-                            )
+                            logger.debug(f"MIME type: '{file_data.content_type}'")
                             logger.debug(f"First 20 bytes: {file_bytes[:20]}")
 
                             # Create a Part for the file using the default constructor
@@ -463,19 +440,13 @@ async def run_agent_stream(
                                         data=file_bytes,
                                     )
                                 )
-                                logger.debug(f"Part created successfully")
+                                logger.debug("Part created successfully")
                             except Exception as part_error:
-                                logger.error(
-                                    f"DEBUG - Error creating Part: {str(part_error)}"
-                                )
-                                logger.error(
-                                    f"DEBUG - Error type: {type(part_error).__name__}"
-                                )
+                                logger.error(f"DEBUG - Error creating Part: {str(part_error)}")
+                                logger.error(f"DEBUG - Error type: {type(part_error).__name__}")
                                 import traceback
 
-                                logger.error(
-                                    f"DEBUG - Stack trace: {traceback.format_exc()}"
-                                )
+                                logger.error(f"DEBUG - Stack trace: {traceback.format_exc()}")
                                 raise
 
                             # Save the file in the ArtifactService
@@ -486,16 +457,12 @@ async def run_agent_stream(
                                 filename=file_data.filename,
                                 artifact=file_part,
                             )
-                            logger.info(
-                                f"Saved file {file_data.filename} as version {version}"
-                            )
+                            logger.info(f"Saved file {file_data.filename} as version {version}")
 
                             # Add the Part to the list of parts for the message content
                             file_parts.append(file_part)
                         except Exception as e:
-                            logger.error(
-                                f"Error processing file {file_data.filename}: {str(e)}"
-                            )
+                            logger.error(f"Error processing file {file_data.filename}: {str(e)}")
 
                 # Create the content with the text message and the files
                 parts = [Part(text=message)]
@@ -514,7 +481,6 @@ async def run_agent_stream(
 
                     # Initialize the event aggregator with 200ms debounce
                     aggregator = EventAggregator(buffer_time_ms=200)
-                    import asyncio
 
                     async for event in events_async:
                         try:
@@ -559,17 +525,17 @@ async def run_agent_stream(
 
                             # Add event to buffer
                             aggregator.add_event(event_dict)
-                            
+
                             # Check if we should yield buffered events
                             if aggregator.should_yield():
                                 latest_event = aggregator.get_latest_event()
                                 if latest_event:
                                     yield json.dumps(latest_event)
-                                    
+
                         except Exception as e:
                             logger.error(f"Error processing event: {e}")
                             continue
-                    
+
                     # Flush any remaining events in the aggregator
                     final_event = aggregator.get_latest_event()
                     if final_event:
@@ -584,12 +550,15 @@ async def run_agent_stream(
                     memory_service.add_session_to_memory(completed_session)
                 except Exception as e:
                     import traceback
+
                     logger.error(f"Error during agent execution: {e}\n{traceback.format_exc()}")
                     error_event = {
                         "role": "agent",
                         "content": {
-                            "role": "agent", 
-                            "parts": [{"type": "text", "text": f"\n\nError executing agent: {str(e)}"}],
+                            "role": "agent",
+                            "parts": [
+                                {"type": "text", "text": f"\n\nError executing agent: {str(e)}"}
+                            ],
                         },
                     }
                     yield json.dumps(error_event)
@@ -611,9 +580,7 @@ async def run_agent_stream(
                 logger.error(f"Error processing request: {str(e)}")
                 raise InternalServerError(str(e)) from e
             except Exception as e:
-                logger.error(
-                    f"Internal error processing request: {str(e)}", exc_info=True
-                )
+                logger.error(f"Internal error processing request: {str(e)}", exc_info=True)
                 raise InternalServerError(str(e))
     except (ValueError, RuntimeError) as ctx_error:
         # Suppress benign context errors during cleanup

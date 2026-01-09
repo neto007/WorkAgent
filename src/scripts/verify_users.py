@@ -17,7 +17,6 @@ The script uses the project's configured database connection
 """
 
 import argparse
-from typing import Tuple
 
 from sqlalchemy.orm import Session
 
@@ -50,7 +49,7 @@ def _apply_verification(user: User, set_active: bool) -> bool:
     return changed
 
 
-def verify_by_email(db: Session, email: str, set_active: bool, dry_run: bool) -> Tuple[int, str]:
+def verify_by_email(db: Session, email: str, set_active: bool, dry_run: bool) -> tuple[int, str]:
     """Verify a specific user by email.
 
     Returns a tuple (updated_count, message).
@@ -69,10 +68,13 @@ def verify_by_email(db: Session, email: str, set_active: bool, dry_run: bool) ->
         return 1, f"Dry-run: 1 usuário seria atualizado ({email})."
 
     db.commit()
-    return 1, f"Usuário atualizado: {email} (email_verified=True{', is_active=True' if set_active else ''})."
+    return (
+        1,
+        f"Usuário atualizado: {email} (email_verified=True{', is_active=True' if set_active else ''}).",
+    )
 
 
-def verify_all_unverified(db: Session, set_active: bool, dry_run: bool) -> Tuple[int, str]:
+def verify_all_unverified(db: Session, set_active: bool, dry_run: bool) -> tuple[int, str]:
     """Verify all users that are currently unverified.
 
     Returns a tuple (updated_count, message).
@@ -91,7 +93,10 @@ def verify_all_unverified(db: Session, set_active: bool, dry_run: bool) -> Tuple
         return updated, f"Dry-run: {updated} usuário(s) seriam atualizados."
 
     db.commit()
-    return updated, f"{updated} usuário(s) atualizado(s) (email_verified=True{', is_active=True' if set_active else ''})."
+    return (
+        updated,
+        f"{updated} usuário(s) atualizado(s) (email_verified=True{', is_active=True' if set_active else ''}).",
+    )
 
 
 def main() -> None:

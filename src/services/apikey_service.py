@@ -1,11 +1,12 @@
-from src.models.models import ApiKey
-from src.utils.crypto import encrypt_api_key, decrypt_api_key
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
-from fastapi import HTTPException, status
-import uuid
 import logging
-from typing import List, Optional
+import uuid
+
+from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.models.models import ApiKey
+from src.utils.crypto import decrypt_api_key, encrypt_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ def create_api_key(
         # Save in the database
         db.add(api_key)
         db.commit()
-        db.refresh(api_key)        
+        db.refresh(api_key)
         logger.info(f"API key '{name}' created for client {client_id}")
         return api_key
     except SQLAlchemyError as e:
@@ -42,7 +43,7 @@ def create_api_key(
         )
 
 
-def get_api_key(db: Session, key_id: uuid.UUID) -> Optional[ApiKey]:
+def get_api_key(db: Session, key_id: uuid.UUID) -> ApiKey | None:
     """Get an API key by ID"""
     try:
         key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
@@ -65,14 +66,10 @@ def get_api_keys_by_client(
     limit: int = 100,
     sort_by: str = "name",
     sort_direction: str = "asc",
-) -> List[ApiKey]:
+) -> list[ApiKey]:
     """List the API keys of a client"""
     try:
-        query = (
-            db.query(ApiKey)
-            .filter(ApiKey.client_id == client_id)
-            .filter(ApiKey.is_active)
-        )
+        query = db.query(ApiKey).filter(ApiKey.client_id == client_id).filter(ApiKey.is_active)
 
         # Apply sorting
         if sort_by == "name":
@@ -92,11 +89,11 @@ def get_api_keys_by_client(
                 query = query.order_by(ApiKey.created_at)
 
         keys = query.offset(skip).limit(limit).all()
-        
+
         # Add masked key value for display to all keys
         for key in keys:
             key.key_value_masked = "*****"
-            
+
         return keys
     except SQLAlchemyError as e:
         logger.error(f"Error listing API keys for client {client_id}: {str(e)}")
@@ -106,7 +103,7 @@ def get_api_keys_by_client(
         )
 
 
-def get_decrypted_api_key(db: Session, key_id: uuid.UUID) -> Optional[str]:
+def get_decrypted_api_key(db: Session, key_id: uuid.UUID) -> str | None:
     """Get the decrypted value of an API key"""
     try:
         key = get_api_key(db, key_id)
@@ -122,11 +119,11 @@ def get_decrypted_api_key(db: Session, key_id: uuid.UUID) -> Optional[str]:
 def update_api_key(
     db: Session,
     key_id: uuid.UUID,
-    name: Optional[str] = None,
-    provider: Optional[str] = None,
-    key_value: Optional[str] = None,
-    is_active: Optional[bool] = None,
-) -> Optional[ApiKey]:
+    name: str | None = None,
+    provider: str | None = None,
+    key_value: str | None = None,
+    is_active: bool | None = None,
+) -> ApiKey | None:
     """Update an API key"""
     try:
         key = get_api_key(db, key_id)
@@ -144,10 +141,10 @@ def update_api_key(
 
         db.commit()
         db.refresh(key)
-        
+
         # Add masked key value for display
         key.key_value_masked = "*****"
-        
+
         logger.info(f"API key {key_id} updated")
         return key
     except SQLAlchemyError as e:

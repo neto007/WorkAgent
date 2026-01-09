@@ -1,35 +1,35 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Response
+import logging
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.orm import Session
+
 from src.config.database import get_db
+from src.config.settings import settings
 from src.models.models import User
 from src.schemas.user import (
-    UserCreate,
-    UserResponse,
-    UserLogin,
-    TokenResponse,
-    ForgotPassword,
-    PasswordReset,
-    MessageResponse,
     ChangePassword,
-)
-from src.services.user_service import (
-    authenticate_user,
-    create_user,
-    verify_email,
-    resend_verification,
-    forgot_password,
-    reset_password,
-    change_password,
+    ForgotPassword,
+    MessageResponse,
+    PasswordReset,
+    TokenResponse,
+    UserCreate,
+    UserLogin,
+    UserResponse,
 )
 from src.services.auth_service import (
     create_access_token,
     get_current_admin_user,
     get_current_user,
 )
-import logging
-
-import logging
-from src.config.settings import settings
+from src.services.user_service import (
+    authenticate_user,
+    change_password,
+    create_user,
+    forgot_password,
+    resend_verification,
+    reset_password,
+    verify_email,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -40,9 +40,7 @@ router = APIRouter(
 )
 
 
-@router.post(
-    "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     """
     Register a new user (client) in the system
@@ -66,9 +64,7 @@ async def register_user(user_data: UserCreate, db: Session = Depends(get_db)):
     return user
 
 
-@router.post(
-    "/register-admin", response_model=UserResponse, status_code=status.HTTP_201_CREATED
-)
+@router.post("/register-admin", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
 async def register_admin(
     user_data: UserCreate,
     db: Session = Depends(get_db),
@@ -94,9 +90,7 @@ async def register_admin(
         logger.error(f"Error registering admin: {message}")
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=message)
 
-    logger.info(
-        f"Admin registered successfully: {user.email} (created by {current_admin.email})"
-    )
+    logger.info(f"Admin registered successfully: {user.email} (created by {current_admin.email})")
     return user
 
 
@@ -125,9 +119,7 @@ async def verify_user_email(token: str, db: Session = Depends(get_db)):
 
 
 @router.post("/resend-verification", response_model=MessageResponse)
-async def resend_verification_email(
-    email_data: ForgotPassword, db: Session = Depends(get_db)
-):
+async def resend_verification_email(email_data: ForgotPassword, db: Session = Depends(get_db)):
     """
     Resend verification email to the user
 
@@ -189,9 +181,7 @@ async def login_for_access_token(
                 detail="User account is inactive",
             )
         else:
-            logger.warning(
-                f"Login attempt failed for {form_data.email} (reason: {reason})"
-            )
+            logger.warning(f"Login attempt failed for {form_data.email} (reason: {reason})")
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -199,13 +189,13 @@ async def login_for_access_token(
             )
 
     access_token = create_access_token(user)
-    
+
     # Determine if we should use secure cookies
     # We disable secure cookies for localhost to allow development even if APP_URL is https (e.g. for production reference)
     is_localhost = "localhost" in settings.APP_URL or "127.0.0.1" in settings.APP_URL
     # Also disable secure cookies if DEBUG is True
     is_secure = settings.APP_URL.startswith("https") and not is_localhost and not settings.DEBUG
-    
+
     # Set HttpOnly cookie
     # CRITICAL: path="/" ensures cookie is sent with ALL requests, not just /auth
     # domain=None works with localhost and development
@@ -216,11 +206,11 @@ async def login_for_access_token(
         secure=is_secure,
         samesite="lax",
         path="/",  # Cookie available for all paths
-        max_age=settings.JWT_EXPIRATION_TIME
+        max_age=settings.JWT_EXPIRATION_TIME,
     )
-    
+
     logger.info(f"Cookie set with secure={is_secure}, path=/, samesite=lax for user: {user.email}")
-    
+
     logger.info(f"Login successful for user: {user.email}")
     return {"access_token": access_token, "token_type": "bearer"}
 
@@ -235,9 +225,7 @@ async def logout(response: Response):
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
-async def forgot_user_password(
-    email_data: ForgotPassword, db: Session = Depends(get_db)
-):
+async def forgot_user_password(email_data: ForgotPassword, db: Session = Depends(get_db)):
     """
     Initiate the password recovery process
 

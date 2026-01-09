@@ -1,15 +1,17 @@
+import logging
+from datetime import datetime
+
+from fastapi import Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
+from jose import JWTError, jwt
 from sqlalchemy.orm import Session
+
+from src.config.database import get_db
+from src.config.settings import settings
 from src.models.models import User
 from src.schemas.user import TokenData
 from src.services.user_service import get_user_by_email
 from src.utils.security import create_jwt_token
-from fastapi import Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
-from src.config.settings import settings
-from src.config.database import get_db
-from datetime import datetime
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -51,16 +53,14 @@ async def get_current_user(
 
     if not token:
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="No token found in header or cookie",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No token found in header or cookie",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         # Decode the token
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
 
         # Extract token data
         email: str = payload.get("sub")
@@ -84,10 +84,10 @@ async def get_current_user(
     except JWTError as e:
         logger.error(f"Error decoding JWT token: {str(e)}")
         raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail=f"Invalid credentials (JWT Error): {str(e)}",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid credentials (JWT Error): {str(e)}",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # Search for user in the database
     user = get_user_by_email(db, email=email)
@@ -97,9 +97,7 @@ async def get_current_user(
 
     if not user.is_active:
         logger.warning(f"Attempt to access inactive user: {user.email}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
 
     return user
 
@@ -121,9 +119,7 @@ async def get_current_active_user(
     """
     if not current_user.is_active:
         logger.warning(f"Attempt to access inactive user: {current_user.email}")
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user"
-        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Inactive user")
     return current_user
 
 
@@ -143,9 +139,7 @@ async def get_current_admin_user(
         HTTPException: If the user is not an administrator
     """
     if not current_user.is_admin:
-        logger.warning(
-            f"Attempt to access admin by non-admin user: {current_user.email}"
-        )
+        logger.warning(f"Attempt to access admin by non-admin user: {current_user.email}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied. Restricted to administrators.",

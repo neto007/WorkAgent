@@ -1,10 +1,11 @@
-from typing import Any, Dict, List, Optional, Tuple
-from contextlib import ExitStack
 import os
-import sys
-from src.utils.logger import setup_logger
-from src.services.mcp_server_service import get_mcp_server
+from contextlib import ExitStack
+from typing import Any
+
 from sqlalchemy.orm import Session
+
+from src.services.mcp_server_service import get_mcp_server
+from src.utils.logger import setup_logger
 
 try:
     from crewai_tools import MCPServerAdapter
@@ -13,9 +14,7 @@ try:
     HAS_MCP_PACKAGES = True
 except ImportError:
     logger = setup_logger(__name__)
-    logger.error(
-        "MCP packages are not installed. Please install mcp and crewai-tools[mcp]"
-    )
+    logger.error("MCP packages are not installed. Please install mcp and crewai-tools[mcp]")
     HAS_MCP_PACKAGES = False
 
 logger = setup_logger(__name__)
@@ -27,8 +26,8 @@ class MCPService:
         self.exit_stack = ExitStack()
 
     def _connect_to_mcp_server(
-        self, server_config: Dict[str, Any]
-    ) -> Tuple[List[Any], Optional[ExitStack]]:
+        self, server_config: dict[str, Any]
+    ) -> tuple[list[Any], ExitStack | None]:
         """Connect to a specific MCP server and return its tools."""
         if not HAS_MCP_PACKAGES:
             logger.error("Cannot connect to MCP server: MCP packages not installed")
@@ -57,9 +56,7 @@ class MCPService:
                     for key, value in env.items():
                         os.environ[key] = value
 
-                connection_params = StdioServerParameters(
-                    command=command, args=args, env=env
-                )
+                connection_params = StdioServerParameters(command=command, args=args, env=env)
 
                 # Create the MCPServerAdapter with the Stdio connection parameters
                 mcp_adapter = MCPServerAdapter(connection_params)
@@ -74,7 +71,7 @@ class MCPService:
             logger.error(f"Error connecting to MCP server: {e}")
             return [], None
 
-    def _filter_incompatible_tools(self, tools: List[Any]) -> List[Any]:
+    def _filter_incompatible_tools(self, tools: list[Any]) -> list[Any]:
         """Filters incompatible tools with the model."""
         problematic_tools = [
             "create_pull_request_review",  # This tool causes the 400 INVALID_ARGUMENT error
@@ -95,9 +92,7 @@ class MCPService:
 
         return filtered_tools
 
-    def _filter_tools_by_agent(
-        self, tools: List[Any], agent_tools: List[str]
-    ) -> List[Any]:
+    def _filter_tools_by_agent(self, tools: list[Any], agent_tools: list[str]) -> list[Any]:
         """Filters tools compatible with the agent."""
         if not agent_tools:
             return tools
@@ -109,9 +104,7 @@ class MCPService:
                 filtered_tools.append(tool)
         return filtered_tools
 
-    async def build_tools(
-        self, mcp_config: Dict[str, Any], db: Session
-    ) -> Tuple[List[Any], Any]:
+    async def build_tools(self, mcp_config: dict[str, Any], db: Session) -> tuple[list[Any], Any]:
         """Builds a list of tools from multiple MCP servers."""
         if not HAS_MCP_PACKAGES:
             logger.error("Cannot build MCP tools: MCP packages not installed")
@@ -141,12 +134,8 @@ class MCPService:
                             for key, value in server_config["env"].items():
                                 if value and value.startswith("env@@"):
                                     env_key = value.replace("env@@", "")
-                                    if server.get("envs") and env_key in server.get(
-                                        "envs", {}
-                                    ):
-                                        server_config["env"][key] = server["envs"][
-                                            env_key
-                                        ]
+                                    if server.get("envs") and env_key in server.get("envs", {}):
+                                        server_config["env"][key] = server["envs"][env_key]
                                     else:
                                         logger.warning(
                                             f"Environment variable '{env_key}' not provided for the MCP server {mcp_server.name}"
@@ -188,9 +177,7 @@ class MCPService:
                 # Process custom MCP servers
                 for server in custom_mcp_servers:
                     if not server:
-                        logger.warning(
-                            "Empty server configuration found in custom_mcp_servers"
-                        )
+                        logger.warning("Empty server configuration found in custom_mcp_servers")
                         continue
 
                     try:
@@ -218,9 +205,7 @@ class MCPService:
                         )
                         continue
 
-            logger.info(
-                f"MCP Toolset created successfully. Total of {len(self.tools)} tools."
-            )
+            logger.info(f"MCP Toolset created successfully. Total of {len(self.tools)} tools.")
 
         except Exception as e:
             # Ensure cleanup

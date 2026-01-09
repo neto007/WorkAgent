@@ -1,17 +1,17 @@
-from typing import List, Optional, Dict, Union, Any
-from pydantic import BaseModel, Field, ConfigDict
-from uuid import UUID
 import secrets
 import string
 import uuid
-from pydantic import validator
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, validator
 
 
 class ToolConfig(BaseModel):
     """Configuration of a tool"""
 
     id: UUID
-    envs: Dict[str, str] = Field(
+    envs: dict[str, str] = Field(
         default_factory=dict, description="Environment variables of the tool"
     )
 
@@ -22,12 +22,10 @@ class MCPServerConfig(BaseModel):
     """Configuration of an MCP server"""
 
     id: UUID
-    envs: Dict[str, str] = Field(
+    envs: dict[str, str] = Field(
         default_factory=dict, description="Environment variables of the server"
     )
-    tools: List[str] = Field(
-        default_factory=list, description="List of tools of the server"
-    )
+    tools: list[str] = Field(default_factory=list, description="List of tools of the server")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -36,7 +34,7 @@ class CustomMCPServerConfig(BaseModel):
     """Configuration of a custom MCP server"""
 
     url: str = Field(..., description="Server URL of the custom MCP server")
-    headers: Dict[str, str] = Field(
+    headers: dict[str, str] = Field(
         default_factory=dict, description="Headers for requests to the server"
     )
 
@@ -46,8 +44,8 @@ class CustomMCPServerConfig(BaseModel):
 class FlowNodes(BaseModel):
     """Configuration of workflow nodes"""
 
-    nodes: List[Any]
-    edges: List[Any]
+    nodes: list[Any]
+    edges: list[Any]
 
 
 class HTTPToolParameter(BaseModel):
@@ -63,9 +61,9 @@ class HTTPToolParameter(BaseModel):
 class HTTPToolParameters(BaseModel):
     """Parameters of an HTTP tool"""
 
-    path_params: Optional[Dict[str, str]] = None
-    query_params: Optional[Dict[str, Union[str, List[str]]]] = None
-    body_params: Optional[Dict[str, HTTPToolParameter]] = None
+    path_params: dict[str, str] | None = None
+    query_params: dict[str, str | list[str]] | None = None
+    body_params: dict[str, HTTPToolParameter] | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,7 +73,7 @@ class HTTPToolErrorHandling(BaseModel):
 
     timeout: int
     retry_count: int
-    fallback_response: Dict[str, str]
+    fallback_response: dict[str, str]
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -85,8 +83,8 @@ class HTTPTool(BaseModel):
 
     name: str
     method: str
-    values: Dict[str, str]
-    headers: Dict[str, str]
+    values: dict[str, str]
+    headers: dict[str, str]
     endpoint: str
     parameters: HTTPToolParameters
     description: str
@@ -98,9 +96,7 @@ class HTTPTool(BaseModel):
 class CustomTools(BaseModel):
     """Configuration of custom tools"""
 
-    http_tools: List[HTTPTool] = Field(
-        default_factory=list, description="List of HTTP tools"
-    )
+    http_tools: list[HTTPTool] = Field(default_factory=list, description="List of HTTP tools")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -119,27 +115,17 @@ class LLMConfig(BaseModel):
         description="API key for the LLM. If not provided, a secure key will be generated automatically.",
     )
 
-    tools: Optional[List[ToolConfig]] = Field(
-        default=None, description="List of available tools"
-    )
-    custom_tools: Optional[CustomTools] = Field(
-        default=None, description="Custom tools"
-    )
-    mcp_servers: Optional[List[MCPServerConfig]] = Field(
+    tools: list[ToolConfig] | None = Field(default=None, description="List of available tools")
+    custom_tools: CustomTools | None = Field(default=None, description="Custom tools")
+    mcp_servers: list[MCPServerConfig] | None = Field(
         default=None, description="List of MCP servers"
     )
-    custom_mcp_servers: Optional[List[CustomMCPServerConfig]] = Field(
+    custom_mcp_servers: list[CustomMCPServerConfig] | None = Field(
         default=None, description="List of custom MCP servers with URL and headers"
     )
-    agent_tools: Optional[List[UUID]] = Field(
-        default=None, description="List of IDs of sub-agents"
-    )
-    sub_agents: Optional[List[UUID]] = Field(
-        default=None, description="List of IDs of sub-agents"
-    )
-    workflow: Optional[FlowNodes] = Field(
-        default=None, description="Workflow configuration"
-    )
+    agent_tools: list[UUID] | None = Field(default=None, description="List of IDs of sub-agents")
+    sub_agents: list[UUID] | None = Field(default=None, description="List of IDs of sub-agents")
+    workflow: FlowNodes | None = Field(default=None, description="Workflow configuration")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -147,9 +133,7 @@ class LLMConfig(BaseModel):
 class SequentialConfig(BaseModel):
     """Configuration for sequential agents"""
 
-    sub_agents: List[UUID] = Field(
-        ..., description="List of IDs of sub-agents in execution order"
-    )
+    sub_agents: list[UUID] = Field(..., description="List of IDs of sub-agents in execution order")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -157,7 +141,7 @@ class SequentialConfig(BaseModel):
 class ParallelConfig(BaseModel):
     """Configuration for parallel agents"""
 
-    sub_agents: List[UUID] = Field(
+    sub_agents: list[UUID] = Field(
         ..., description="List of IDs of sub-agents for parallel execution"
     )
 
@@ -167,15 +151,9 @@ class ParallelConfig(BaseModel):
 class LoopConfig(BaseModel):
     """Configuration for loop agents"""
 
-    sub_agents: List[UUID] = Field(
-        ..., description="List of IDs of sub-agents for loop execution"
-    )
-    max_iterations: Optional[int] = Field(
-        default=None, description="Maximum number of iterations"
-    )
-    condition: Optional[str] = Field(
-        default=None, description="Condition to stop the loop"
-    )
+    sub_agents: list[UUID] = Field(..., description="List of IDs of sub-agents for loop execution")
+    max_iterations: int | None = Field(default=None, description="Maximum number of iterations")
+    condition: str | None = Field(default=None, description="Condition to stop the loop")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -183,13 +161,11 @@ class LoopConfig(BaseModel):
 class WorkflowConfig(BaseModel):
     """Configuration for workflow agents"""
 
-    workflow: Dict[str, Any] = Field(
-        ..., description="Workflow configuration with nodes and edges"
-    )
-    sub_agents: Optional[List[UUID]] = Field(
+    workflow: dict[str, Any] = Field(..., description="Workflow configuration with nodes and edges")
+    sub_agents: list[UUID] | None = Field(
         default_factory=list, description="List of IDs of sub-agents used in workflow"
     )
-    api_key: Optional[str] = Field(
+    api_key: str | None = Field(
         default_factory=generate_api_key, description="API key for the workflow agent"
     )
 
@@ -199,10 +175,8 @@ class WorkflowConfig(BaseModel):
 class AgentTask(BaseModel):
     """Task configuration for agents"""
 
-    agent_id: Union[UUID, str] = Field(
-        ..., description="ID of the agent assigned to this task"
-    )
-    enabled_tools: Optional[List[str]] = Field(
+    agent_id: UUID | str = Field(..., description="ID of the agent assigned to this task")
+    enabled_tools: list[str] | None = Field(
         default_factory=list, description="List of tool names to be used in the task"
     )
     description: str = Field(..., description="Description of the task to be performed")
@@ -223,13 +197,11 @@ class AgentTask(BaseModel):
 class AgentConfig(BaseModel):
     """Configuration for agents"""
 
-    tasks: List[AgentTask] = Field(
-        ..., description="List of tasks to be performed by the agent"
-    )
-    api_key: Optional[str] = Field(
+    tasks: list[AgentTask] = Field(..., description="List of tasks to be performed by the agent")
+    api_key: str | None = Field(
         default_factory=generate_api_key, description="API key for the agent"
     )
-    sub_agents: Optional[List[UUID]] = Field(
+    sub_agents: list[UUID] | None = Field(
         default_factory=list, description="List of IDs of sub-agents used in agent"
     )
 

@@ -1,19 +1,21 @@
 import os
+import uuid
+
 from sqlalchemy import (
-    Column,
-    String,
+    JSON,
     UUID,
+    Boolean,
+    CheckConstraint,
+    Column,
     DateTime,
     ForeignKey,
-    JSON,
+    String,
     Text,
-    CheckConstraint,
-    Boolean,
 )
+from sqlalchemy.orm import backref, relationship
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship, backref
+
 from src.config.database import Base
-import uuid
 
 
 class Client(Base):
@@ -174,12 +176,8 @@ class MCPServer(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     __table_args__ = (
-        CheckConstraint(
-            "type IN ('official', 'community')", name="check_mcp_server_type"
-        ),
-        CheckConstraint(
-            "config_type IN ('studio', 'sse')", name="check_mcp_server_config_type"
-        ),
+        CheckConstraint("type IN ('official', 'community')", name="check_mcp_server_type"),
+        CheckConstraint("config_type IN ('studio', 'sse')", name="check_mcp_server_config_type"),
     )
 
 
@@ -211,9 +209,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    user_id = Column(UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     action = Column(String, nullable=False)
     resource_type = Column(String, nullable=False)
     resource_id = Column(String, nullable=True)

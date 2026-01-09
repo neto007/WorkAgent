@@ -1,13 +1,14 @@
-from fastapi import HTTPException, Depends, status, Request
+import logging
+from datetime import datetime
+from uuid import UUID
+
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
-from src.config.settings import settings
-from datetime import datetime
 from sqlalchemy.orm import Session
+
 from src.config.database import get_db
-from uuid import UUID
-import logging
-from typing import Optional
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,17 +16,10 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
 # Role hierarchy definition
-ROLE_HIERARCHY = {
-    "owner": 4,
-    "admin": 3,
-    "editor": 2,
-    "viewer": 1
-}
+ROLE_HIERARCHY = {"owner": 4, "admin": 3, "editor": 2, "viewer": 1}
 
-async def get_jwt_token(
-    request: Request,
-    token: str = Depends(oauth2_scheme)
-) -> dict:
+
+async def get_jwt_token(request: Request, token: str = Depends(oauth2_scheme)) -> dict:
     """
     Extracts and validates the JWT token from header or cookie
 
@@ -49,7 +43,7 @@ async def get_jwt_token(
     if not token:
         token = request.cookies.get("access_token")
         if token:
-            pass # logger.info(f"Token found in cookie for JWT middleware: {token[:10]}...")
+            pass  # logger.info(f"Token found in cookie for JWT middleware: {token[:10]}...")
         else:
             logger.warning("No token found in header or cookie (jwt_middleware)")
 
@@ -61,9 +55,7 @@ async def get_jwt_token(
         )
 
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
 
         email: str = payload.get("sub")
         if email is None:
@@ -108,9 +100,7 @@ async def verify_user_client(
     # For non-admins, verify if the client_id corresponds
     user_client_id = payload.get("client_id")
     if not user_client_id:
-        logger.warning(
-            f"Non-admin user without client_id in token: {payload.get('sub')}"
-        )
+        logger.warning(f"Non-admin user without client_id in token: {payload.get('sub')}")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="User not associated with a client",
@@ -133,20 +123,17 @@ async def verify_user_client(
     return True
 
 
-async def verify_role(
-    required_role: str,
-    payload: dict
-) -> bool:
+async def verify_role(required_role: str, payload: dict) -> bool:
     """
     Verifies if the user has at least the required role severity.
-    
+
     Args:
         required_role: The minimum role required (viewer, editor, admin, owner)
         payload: The JWT payload containing the user's role
-        
+
     Returns:
         bool: True if authorized
-        
+
     Raises:
         HTTPException: If role is insufficient
     """
@@ -154,23 +141,22 @@ async def verify_role(
     if payload.get("is_admin", False):
         return True
 
-    user_role = payload.get("role", "viewer") # Default to viewer if missing
-    
+    user_role = payload.get("role", "viewer")  # Default to viewer if missing
+
     required_level = ROLE_HIERARCHY.get(required_role, 0)
     user_level = ROLE_HIERARCHY.get(user_role, 0)
-    
+
     if user_level < required_level:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"Insufficient permissions. Required role: {required_role}"
+            detail=f"Insufficient permissions. Required role: {required_role}",
         )
-        
+
     return True
 
 
 async def verify_user_access(
-    payload: dict = Depends(get_jwt_token),
-    required_role: str = "viewer"
+    payload: dict = Depends(get_jwt_token), required_role: str = "viewer"
 ) -> bool:
     """Dependency wrapper for verify_role"""
     return await verify_role(required_role, payload)
@@ -179,7 +165,7 @@ async def verify_user_access(
 async def verify_admin(payload: dict = Depends(get_jwt_token)) -> bool:
     """
     Verifies if the user is an administrator
-    
+
     Args:
         payload: Token JWT payload
 
@@ -201,7 +187,7 @@ async def verify_admin(payload: dict = Depends(get_jwt_token)) -> bool:
 
 def get_current_user_client_id(
     payload: dict = Depends(get_jwt_token),
-) -> Optional[UUID]:
+) -> UUID | None:
     """
     Gets the ID of the client associated with the current user
 
@@ -221,15 +207,13 @@ def get_current_user_client_id(
     return None
 
 
-async def get_jwt_token_ws(token: str) -> Optional[dict]:
+async def get_jwt_token_ws(token: str) -> dict | None:
     """
     Verifies and decodes the JWT token for WebSocket.
     Returns the payload if the token is valid, None otherwise.
     """
     try:
-        payload = jwt.decode(
-            token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM]
-        )
+        payload = jwt.decode(token, settings.JWT_SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
         return payload
     except JWTError:
         return None

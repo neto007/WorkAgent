@@ -21,7 +21,7 @@ classifiers = [
 
 # Main dependencies
 dependencies = [
-    "fastapi==0.115.12", 
+    "fastapi==0.115.12",
     "uvicorn==0.34.2",
     "pydantic==2.11.3",
     "sqlalchemy==2.0.40",
@@ -63,19 +63,23 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "black==25.1.0",
-    "flake8==7.2.0",
+    "ruff==0.8.6",
+    "mypy==1.14.1",
     "pytest==8.3.5",
     "pytest-cov==6.1.1",
     "httpx==0.28.1",
     "pytest-asyncio==0.26.0",
+    "pre-commit==4.0.1",
+    "types-redis==4.6.0.20241004",
+    "types-passlib==1.7.7.20240819",
 ]
 
 [tool.setuptools]
 packages = ["src"]
 
 [tool.black]
-line-length = 88
-target-version = ["py310"]
+line-length = 100
+target-version = ["py311"]
 include = '\.pyi?$'
 exclude = '''
 /(
@@ -89,9 +93,54 @@ exclude = '''
   | build
   | dist
   | venv
-  | alembic/versions
+  | node_modules
+  | migrations
+  | alembic
 )/
 '''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "N805",  # first argument should be named self
+]
+exclude = [
+    ".git",
+    ".venv",
+    "venv",
+    "__pycache__",
+    "migrations",
+    "alembic",
+    "node_modules",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false  # Gradual adoption
+ignore_missing_imports = true
+no_implicit_optional = true
+show_error_codes = true
+exclude = [
+    "migrations/",
+    "alembic/",
+    "tests/",
+    "node_modules/",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

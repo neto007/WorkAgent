@@ -1,8 +1,10 @@
-from typing import Any, Dict, List
-from google.adk.tools import FunctionTool
-import requests
 import json
 import urllib.parse
+from typing import Any
+
+import requests
+from google.adk.tools import FunctionTool
+
 from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
@@ -12,7 +14,7 @@ class CustomToolBuilder:
     def __init__(self):
         self.tools = []
 
-    def _create_http_tool(self, tool_config: Dict[str, Any]) -> FunctionTool:
+    def _create_http_tool(self, tool_config: dict[str, Any]) -> FunctionTool:
         """Create an HTTP tool based on the provided configuration."""
         name = tool_config["name"]
         description = tool_config["description"]
@@ -43,7 +45,7 @@ class CustomToolBuilder:
                 for param, value in path_params.items():
                     if param in all_values:
                         # URL encode the value for URL safe characters
-                        replacement_value = urllib.parse.quote(str(all_values[param]), safe='')
+                        replacement_value = urllib.parse.quote(str(all_values[param]), safe="")
                         url = url.replace(f"{{{param}}}", replacement_value)
 
                 # Process query parameters
@@ -151,16 +153,14 @@ class CustomToolBuilder:
 
         return FunctionTool(func=http_tool)
 
-    def build_tools(self, tools_config: Dict[str, Any]) -> List[FunctionTool]:
+    def build_tools(self, tools_config: dict[str, Any]) -> list[FunctionTool]:
         """Builds a list of tools based on the provided configuration. Accepts both 'tools' and 'custom_tools' (with http_tools)."""
         self.tools = []
 
         http_tools = []
         if tools_config.get("http_tools"):
             http_tools = tools_config.get("http_tools", [])
-        elif tools_config.get("custom_tools") and tools_config["custom_tools"].get(
-            "http_tools"
-        ):
+        elif tools_config.get("custom_tools") and tools_config["custom_tools"].get("http_tools"):
             http_tools = tools_config["custom_tools"].get("http_tools", [])
         elif (
             tools_config.get("tools")

@@ -1,8 +1,10 @@
+import logging
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+
 from src.config.database import get_db
-from typing import List
-import uuid
 from src.core.jwt_middleware import (
     get_jwt_token,
     verify_admin,
@@ -14,7 +16,6 @@ from src.schemas.schemas import (
 from src.services import (
     tool_service,
 )
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -38,7 +39,7 @@ async def create_tool(
     return tool_service.create_tool(db, tool)
 
 
-@router.get("/", response_model=List[Tool])
+@router.get("/", response_model=list[Tool])
 async def read_tools(
     skip: int = 0,
     limit: int = 100,
@@ -58,9 +59,7 @@ async def read_tool(
     # All authenticated users can view tool details
     db_tool = tool_service.get_tool(db, tool_id)
     if db_tool is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
     return db_tool
 
 
@@ -76,9 +75,7 @@ async def update_tool(
 
     db_tool = tool_service.update_tool(db, tool_id, tool)
     if db_tool is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")
     return db_tool
 
 
@@ -92,6 +89,4 @@ async def delete_tool(
     await verify_admin(payload)
 
     if not tool_service.delete_tool(db, tool_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tool not found")

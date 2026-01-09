@@ -1,17 +1,18 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
+import logging
+import uuid
+
 from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from src.models.models import MCPServer
 from src.schemas.schemas import MCPServerCreate
 from src.utils.mcp_discovery import discover_mcp_tools
-from typing import List, Optional
-import uuid
-import logging
 
 logger = logging.getLogger(__name__)
 
 
-def get_mcp_server(db: Session, server_id: uuid.UUID) -> Optional[MCPServer]:
+def get_mcp_server(db: Session, server_id: uuid.UUID) -> MCPServer | None:
     """Search for an MCP server by ID"""
     try:
         server = db.query(MCPServer).filter(MCPServer.id == server_id).first()
@@ -27,7 +28,7 @@ def get_mcp_server(db: Session, server_id: uuid.UUID) -> Optional[MCPServer]:
         )
 
 
-def get_mcp_servers(db: Session, skip: int = 0, limit: int = 100) -> List[MCPServer]:
+def get_mcp_servers(db: Session, skip: int = 0, limit: int = 100) -> list[MCPServer]:
     """Search for all MCP servers with pagination"""
     try:
         return db.query(MCPServer).offset(skip).limit(limit).all()
@@ -56,14 +57,13 @@ def create_mcp_server(db: Session, server: MCPServerCreate) -> MCPServer:
                 logger.error(f"Failed to discover tools during server creation: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Falha ao conectar ao servidor MCP ou descobrir ferramentas: {str(e)}"
+                    detail=f"Falha ao conectar ao servidor MCP ou descobrir ferramentas: {str(e)}",
                 )
 
         else:
             # Handle both dict and Pydantic model cases
             server_data["tools"] = [
-                tool if isinstance(tool, dict) else tool.model_dump() 
-                for tool in supplied_tools
+                tool if isinstance(tool, dict) else tool.model_dump() for tool in supplied_tools
             ]
         db_server = MCPServer(**server_data)
         db.add(db_server)
@@ -82,7 +82,7 @@ def create_mcp_server(db: Session, server: MCPServerCreate) -> MCPServer:
 
 def update_mcp_server(
     db: Session, server_id: uuid.UUID, server: MCPServerCreate
-) -> Optional[MCPServer]:
+) -> MCPServer | None:
     """Update an existing MCP server"""
     try:
         db_server = get_mcp_server(db, server_id)
@@ -96,7 +96,7 @@ def update_mcp_server(
         for key, value in server_data.items():
             if key == "config_json":
                 # Deep update for config_json to ensure nested dicts (headers) are preserved
-                current_config = getattr(db_server, "config_json") or {}
+                current_config = db_server.config_json or {}
                 if isinstance(value, dict):
                     # Merge if it's a dict, otherwise replace
                     new_config = {**current_config, **value}

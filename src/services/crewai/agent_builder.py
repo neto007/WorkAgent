@@ -1,16 +1,17 @@
-from typing import List, Tuple, Optional
-from src.schemas.schemas import Agent
+import uuid
+from contextlib import AsyncExitStack
+from datetime import datetime
+
+from crewai import LLM, Crew, Process, Task
+from crewai import Agent as LlmAgent
+from sqlalchemy.orm import Session
+
 from src.schemas.agent_config import AgentTask
+from src.schemas.schemas import Agent
+from src.services.apikey_service import get_decrypted_api_key
 from src.services.crewai.custom_tool import CustomToolBuilder
 from src.services.crewai.mcp_service import MCPService
 from src.utils.logger import setup_logger
-from src.services.apikey_service import get_decrypted_api_key
-from sqlalchemy.orm import Session
-from contextlib import AsyncExitStack
-from crewai import LLM, Agent as LlmAgent, Crew, Task, Process
-
-from datetime import datetime
-import uuid
 
 logger = setup_logger(__name__)
 
@@ -32,9 +33,7 @@ class AgentBuilder:
                 api_key = decrypted_key
             else:
                 logger.error(f"Stored API key not found for agent {agent.name}")
-                raise ValueError(
-                    f"API key with ID {agent.api_key_id} not found or inactive"
-                )
+                raise ValueError(f"API key with ID {agent.api_key_id} not found or inactive")
         else:
             # Check if there is an API key in the config (temporary field)
             config_api_key = agent.config.get("api_key") if agent.config else None
@@ -54,9 +53,7 @@ class AgentBuilder:
                     api_key = config_api_key
             else:
                 logger.error(f"No API key configured for agent {agent.name}")
-                raise ValueError(
-                    f"Agent {agent.name} does not have a configured API key"
-                )
+                raise ValueError(f"Agent {agent.name} does not have a configured API key")
 
         return api_key
 
@@ -67,8 +64,8 @@ class AgentBuilder:
         return LLM(model=agent.model, api_key=api_key)
 
     async def _create_llm_agent(
-        self, agent: Agent, enabled_tools: List[str] = []
-    ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
+        self, agent: Agent, enabled_tools: list[str] = []
+    ) -> tuple[LlmAgent, AsyncExitStack | None]:
         """Create an LLM agent from the agent data."""
         # Get custom tools from the configuration
         custom_tools = []
@@ -125,9 +122,7 @@ class AgentBuilder:
 
         return llm_agent, mcp_exit_stack
 
-    async def _create_tasks(
-        self, agent: LlmAgent, tasks: List[AgentTask] = []
-    ) -> List[Task]:
+    async def _create_tasks(self, agent: LlmAgent, tasks: list[AgentTask] = []) -> list[Task]:
         """Create tasks from the agent data."""
         tasks_list = []
         if tasks:
@@ -143,7 +138,7 @@ class AgentBuilder:
             )
         return tasks_list
 
-    async def build_crew(self, agents: List[LlmAgent], tasks: List[Task] = []) -> Crew:
+    async def build_crew(self, agents: list[LlmAgent], tasks: list[Task] = []) -> Crew:
         """Create a crew from the agent data."""
         return Crew(
             agents=agents,
@@ -153,8 +148,8 @@ class AgentBuilder:
         )
 
     async def build_llm_agent(
-        self, root_agent, enabled_tools: List[str] = []
-    ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
+        self, root_agent, enabled_tools: list[str] = []
+    ) -> tuple[LlmAgent, AsyncExitStack | None]:
         """Build an LLM agent with its sub-agents."""
         logger.info("Creating LLM agent")
 
@@ -170,8 +165,8 @@ class AgentBuilder:
             raise
 
     async def build_agent(
-        self, root_agent, enabled_tools: List[str] = []
-    ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
+        self, root_agent, enabled_tools: list[str] = []
+    ) -> tuple[LlmAgent, AsyncExitStack | None]:
         """Build the appropriate agent based on the type of the root agent."""
         if root_agent.type == "llm":
             agent, exit_stack = await self.build_llm_agent(root_agent, enabled_tools)

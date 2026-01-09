@@ -1,13 +1,15 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
+import logging
+import uuid
+from typing import Any
+
+import httpx
 from fastapi import HTTPException, status
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
 from src.models.models import Agent, AgentFolder, ApiKey
 from src.schemas.schemas import AgentCreate
-from typing import List, Optional, Dict, Any, Union
 from src.services.mcp_server_service import get_mcp_server
-import uuid
-import logging
-import httpx
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +37,7 @@ def _convert_uuid_to_str(obj):
         return obj
 
 
-def validate_sub_agents(db: Session, sub_agents: List[Union[uuid.UUID, str]]) -> bool:
+def validate_sub_agents(db: Session, sub_agents: list[uuid.UUID | str]) -> bool:
     """Validate if all sub-agents exist"""
     logger.info(f"Validating sub-agents: {sub_agents}")
 
@@ -58,7 +60,7 @@ def validate_sub_agents(db: Session, sub_agents: List[Union[uuid.UUID, str]]) ->
     return True
 
 
-def get_agent(db: Session, agent_id: Union[uuid.UUID, str]) -> Optional[Agent]:
+def get_agent(db: Session, agent_id: uuid.UUID | str) -> Agent | None:
     """Search for an agent by ID"""
     try:
         # Convert to UUID if it's a string
@@ -76,9 +78,7 @@ def get_agent(db: Session, agent_id: Union[uuid.UUID, str]) -> Optional[Agent]:
 
         # Sanitize agent name if it contains spaces or special characters
         if agent.name and any(c for c in agent.name if not (c.isalnum() or c == "_")):
-            agent.name = "".join(
-                c if c.isalnum() or c == "_" else "_" for c in agent.name
-            )
+            agent.name = "".join(c if c.isalnum() or c == "_" else "_" for c in agent.name)
             # Update in database
             db.commit()
 
@@ -97,10 +97,10 @@ def get_agents_by_client(
     skip: int = 0,
     limit: int = 100,
     active_only: bool = True,
-    folder_id: Optional[uuid.UUID] = None,
+    folder_id: uuid.UUID | None = None,
     sort_by: str = "name",
     sort_direction: str = "asc",
-) -> List[Agent]:
+) -> list[Agent]:
     """Search for agents by client with pagination and optional folder filter"""
     try:
         query = db.query(Agent).filter(Agent.client_id == client_id)
@@ -125,12 +125,8 @@ def get_agents_by_client(
 
         # Sanitize agent names if they contain spaces or special characters
         for agent in agents:
-            if agent.name and any(
-                c for c in agent.name if not (c.isalnum() or c == "_")
-            ):
-                agent.name = "".join(
-                    c if c.isalnum() or c == "_" else "_" for c in agent.name
-                )
+            if agent.name and any(c for c in agent.name if not (c.isalnum() or c == "_")):
+                agent.name = "".join(c if c.isalnum() or c == "_" else "_" for c in agent.name)
                 # Update in database
                 db.commit()
 
@@ -196,7 +192,9 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
                 raise ValueError("Invalid configuration: must be an object with tasks")
 
             if "tasks" not in agent.config:
-                raise ValueError(f"Invalid configuration: tasks is required for {agent.type} agents")
+                raise ValueError(
+                    f"Invalid configuration: tasks is required for {agent.type} agents"
+                )
 
             if not agent.config["tasks"]:
                 raise ValueError("Invalid configuration: tasks cannot be empty")
@@ -223,7 +221,9 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
                 raise ValueError("Invalid configuration: must be an object with sub_agents")
 
             if "sub_agents" not in agent.config:
-                raise ValueError("Invalid configuration: sub_agents is required for sequential, parallel or loop agents")
+                raise ValueError(
+                    "Invalid configuration: sub_agents is required for sequential, parallel or loop agents"
+                )
 
             if not agent.config["sub_agents"]:
                 raise ValueError("Invalid configuration: sub_agents cannot be empty")
@@ -243,7 +243,7 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
             agent.config = config
 
         processed_config = {}
-        
+
         # FIX: Respect api_key_id field when provided by frontend
         # Only generate random UUID for legacy flows (workflow/task without api_key_id)
         if agent.api_key_id:
@@ -256,7 +256,7 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
             if not config.get("api_key") or config.get("api_key") == "":
                 logger.info("Generating automatic API key for agent (legacy flow)")
                 config["api_key"] = generate_api_key()
-            
+
             processed_config["api_key"] = config.get("api_key", "")
 
         if "tools" in config:
@@ -344,15 +344,11 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
 
         # Process sub-agents
         if "sub_agents" in config and config["sub_agents"] is not None:
-            processed_config["sub_agents"] = [
-                str(agent_id) for agent_id in config["sub_agents"]
-            ]
+            processed_config["sub_agents"] = [str(agent_id) for agent_id in config["sub_agents"]]
 
         # Process agent tools
         if "agent_tools" in config and config["agent_tools"] is not None:
-            processed_config["agent_tools"] = [
-                str(agent_id) for agent_id in config["agent_tools"]
-            ]
+            processed_config["agent_tools"] = [str(agent_id) for agent_id in config["agent_tools"]]
 
         # Process tools
         if "tools" in config and config["tools"] is not None:
@@ -412,9 +408,7 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
         )
 
 
-async def update_agent(
-    db: Session, agent_id: uuid.UUID, agent_data: Dict[str, Any]
-) -> Agent:
+async def update_agent(db: Session, agent_id: uuid.UUID, agent_data: dict[str, Any]) -> Agent:
     """Update an existing agent"""
     try:
         agent = db.query(Agent).filter(Agent.id == agent_id).first()
@@ -443,9 +437,16 @@ async def update_agent(
                 )
 
         # Continue with the original code
-        if "type" in agent_data and agent_data["type"] == "a2a" and (
-            agent.type != "a2a" or 
-            ("agent_card_url" in agent_data and agent_data["agent_card_url"] != agent.agent_card_url)
+        if (
+            "type" in agent_data
+            and agent_data["type"] == "a2a"
+            and (
+                agent.type != "a2a"
+                or (
+                    "agent_card_url" in agent_data
+                    and agent_data["agent_card_url"] != agent.agent_card_url
+                )
+            )
         ):
             if "agent_card_url" not in agent_data or not agent_data["agent_card_url"]:
                 raise HTTPException(
@@ -491,7 +492,11 @@ async def update_agent(
                     detail=f"Failed to process agent card: {str(e)}",
                 )
 
-        elif "agent_card_url" in agent_data and agent.type == "a2a" and agent_data["agent_card_url"] != agent.agent_card_url:
+        elif (
+            "agent_card_url" in agent_data
+            and agent.type == "a2a"
+            and agent_data["agent_card_url"] != agent.agent_card_url
+        ):
             if not agent_data["agent_card_url"]:
                 raise HTTPException(
                     status_code=400,
@@ -609,10 +614,7 @@ async def update_agent(
                 processed_config["mcp_servers"] = config["mcp_servers"]
 
             # Process custom MCP servers
-            if (
-                "custom_mcp_servers" in config
-                and config["custom_mcp_servers"] is not None
-            ):
+            if "custom_mcp_servers" in config and config["custom_mcp_servers"] is not None:
                 processed_custom_servers = []
                 for server in config["custom_mcp_servers"]:
                     # Validate URL format
@@ -769,7 +771,7 @@ def activate_agent(db: Session, agent_id: uuid.UUID) -> bool:
 
 # Functions for agent folders
 def create_agent_folder(
-    db: Session, client_id: uuid.UUID, name: str, description: Optional[str] = None
+    db: Session, client_id: uuid.UUID, name: str, description: str | None = None
 ) -> AgentFolder:
     """Create a new folder to organize agents"""
     try:
@@ -788,7 +790,7 @@ def create_agent_folder(
         )
 
 
-def get_agent_folder(db: Session, folder_id: uuid.UUID) -> Optional[AgentFolder]:
+def get_agent_folder(db: Session, folder_id: uuid.UUID) -> AgentFolder | None:
     """Search for an agent folder by ID"""
     try:
         return db.query(AgentFolder).filter(AgentFolder.id == folder_id).first()
@@ -802,7 +804,7 @@ def get_agent_folder(db: Session, folder_id: uuid.UUID) -> Optional[AgentFolder]
 
 def get_agent_folders_by_client(
     db: Session, client_id: uuid.UUID, skip: int = 0, limit: int = 100
-) -> List[AgentFolder]:
+) -> list[AgentFolder]:
     """List the agent folders of a client"""
     try:
         return (
@@ -823,9 +825,9 @@ def get_agent_folders_by_client(
 def update_agent_folder(
     db: Session,
     folder_id: uuid.UUID,
-    name: Optional[str] = None,
-    description: Optional[str] = None,
-) -> Optional[AgentFolder]:
+    name: str | None = None,
+    description: str | None = None,
+) -> AgentFolder | None:
     """Update an agent folder"""
     try:
         folder = get_agent_folder(db, folder_id)
@@ -877,8 +879,8 @@ def delete_agent_folder(db: Session, folder_id: uuid.UUID) -> bool:
 
 
 def assign_agent_to_folder(
-    db: Session, agent_id: uuid.UUID, folder_id: Optional[uuid.UUID]
-) -> Optional[Agent]:
+    db: Session, agent_id: uuid.UUID, folder_id: uuid.UUID | None
+) -> Agent | None:
     """Assign an agent to a folder (or remove from folder if folder_id is None)"""
     try:
         agent = get_agent(db, agent_id)
@@ -925,16 +927,10 @@ def assign_agent_to_folder(
 
 def get_agents_by_folder(
     db: Session, folder_id: uuid.UUID, skip: int = 0, limit: int = 100
-) -> List[Agent]:
+) -> list[Agent]:
     """List the agents of a specific folder"""
     try:
-        return (
-            db.query(Agent)
-            .filter(Agent.folder_id == folder_id)
-            .offset(skip)
-            .limit(limit)
-            .all()
-        )
+        return db.query(Agent).filter(Agent.folder_id == folder_id).offset(skip).limit(limit).all()
     except SQLAlchemyError as e:
         logger.error(f"Error listing agents of folder {folder_id}: {str(e)}")
         raise HTTPException(
@@ -945,10 +941,10 @@ def get_agents_by_folder(
 
 async def import_agents_from_json(
     db: Session,
-    agents_data: Dict[str, Any],
+    agents_data: dict[str, Any],
     client_id: uuid.UUID,
-    folder_id: Optional[uuid.UUID] = None,
-) -> List[Agent]:
+    folder_id: uuid.UUID | None = None,
+) -> list[Agent]:
     """
     Import one or more agents from JSON data
 
@@ -1026,9 +1022,7 @@ async def import_agents_from_json(
                                     f"Referenced sub_agent {sub_agent_id} not found - will be skipped"
                                 )
                         except Exception as e:
-                            logger.warning(
-                                f"Error processing sub_agent {sub_agent_id}: {str(e)}"
-                            )
+                            logger.warning(f"Error processing sub_agent {sub_agent_id}: {str(e)}")
 
                     config["sub_agents"] = processed_sub_agents
 
@@ -1047,9 +1041,7 @@ async def import_agents_from_json(
                                     f"Referenced agent_tool {agent_tool_id} not found - will be skipped"
                                 )
                         except Exception as e:
-                            logger.warning(
-                                f"Error processing agent_tool {agent_tool_id}: {str(e)}"
-                            )
+                            logger.warning(f"Error processing agent_tool {agent_tool_id}: {str(e)}")
 
                     config["agent_tools"] = processed_agent_tools
 
@@ -1120,10 +1112,7 @@ async def import_agents_from_json(
 
                     if "nodes" in workflow and isinstance(workflow["nodes"], list):
                         for node in workflow["nodes"]:
-                            if (
-                                isinstance(node, dict)
-                                and node.get("type") == "agent-node"
-                            ):
+                            if isinstance(node, dict) and node.get("type") == "agent-node":
                                 if "data" in node and "agent" in node["data"]:
                                     agent_node = node["data"]["agent"]
 
@@ -1136,9 +1125,7 @@ async def import_agents_from_json(
                                         if node_agent_id in id_mapping:
                                             # Use our newly created agent
                                             # Get the agent from database with the mapped ID
-                                            mapped_id = uuid.UUID(
-                                                id_mapping[node_agent_id]
-                                            )
+                                            mapped_id = uuid.UUID(id_mapping[node_agent_id])
                                             db_agent = get_agent(db, mapped_id)
                                             if db_agent:
                                                 # Replace with database agent definition
@@ -1158,9 +1145,7 @@ async def import_agents_from_json(
                                         else:
                                             # Check if this agent exists in database
                                             try:
-                                                existing_agent = get_agent(
-                                                    db, node_agent_id
-                                                )
+                                                existing_agent = get_agent(db, node_agent_id)
                                                 if existing_agent:
                                                     # Replace with database agent definition
                                                     # Extract agent data as dictionary
@@ -1183,14 +1168,10 @@ async def import_agents_from_json(
                                                         del agent_node["id"]
 
                                                     # Set client_id to match parent
-                                                    agent_node["client_id"] = str(
-                                                        client_id
-                                                    )
+                                                    agent_node["client_id"] = str(client_id)
 
                                                     # Create agent
-                                                    inner_agent_create = AgentCreate(
-                                                        **agent_node
-                                                    )
+                                                    inner_agent_create = AgentCreate(**agent_node)
                                                     inner_db_agent = await create_agent(
                                                         db, inner_agent_create
                                                     )
@@ -1239,9 +1220,7 @@ async def import_agents_from_json(
                                         f"Referenced sub_agent {sub_agent_id} not found - will be skipped"
                                     )
                         except Exception as e:
-                            logger.warning(
-                                f"Error processing sub_agent {sub_agent_id}: {str(e)}"
-                            )
+                            logger.warning(f"Error processing sub_agent {sub_agent_id}: {str(e)}")
 
                     config["sub_agents"] = processed_sub_agents
 

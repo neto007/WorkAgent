@@ -5,25 +5,31 @@ This client provides a unified interface to communicate with A2A agents,
 automatically detecting and using the best available implementation.
 """
 
-import logging
-import asyncio
 import json
-from typing import Dict, Any, Optional, AsyncIterator, Union, List
-from uuid import uuid4, UUID
+import logging
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any
+from uuid import UUID, uuid4
 
 import httpx
 
 try:
     from a2a.client import A2AClient as SDKClient
     from a2a.types import (
-        SendMessageRequest,
-        MessageSendParams,
-        SendStreamingMessageRequest,
-        Message as SDKMessage,
-        TextPart as SDKTextPart,
         FilePart as SDKFilePart,
+    )
+    from a2a.types import (
+        Message as SDKMessage,
+    )
+    from a2a.types import (
+        MessageSendParams,
+        SendMessageRequest,
+        SendStreamingMessageRequest,
+    )
+    from a2a.types import (
+        TextPart as SDKTextPart,
     )
 
     SDK_AVAILABLE = True
@@ -33,15 +39,6 @@ except ImportError:
 
 from src.schemas.a2a_types import (
     Message as CustomMessage,
-    Task as CustomTask,
-    TaskSendParams as CustomTaskSendParams,
-    SendTaskRequest as CustomSendTaskRequest,
-    SendTaskStreamingRequest as CustomSendTaskStreamingRequest,
-)
-from src.schemas.a2a_enhanced_types import (
-    A2ATypeValidator,
-    convert_to_sdk_format,
-    convert_from_sdk_format,
 )
 
 logger = logging.getLogger(__name__)
@@ -63,7 +60,7 @@ class A2AClientConfig:
     api_key: str
     implementation: A2AImplementation = A2AImplementation.AUTO
     timeout: int = 30
-    custom_headers: Optional[Dict[str, str]] = None
+    custom_headers: dict[str, str] | None = None
 
 
 @dataclass
@@ -71,10 +68,10 @@ class A2AResponse:
     """A2A unified response."""
 
     success: bool
-    data: Optional[Any] = None
-    error: Optional[str] = None
-    implementation_used: Optional[A2AImplementation] = None
-    raw_response: Optional[Any] = None
+    data: Any | None = None
+    error: str | None = None
+    implementation_used: A2AImplementation | None = None
+    raw_response: Any | None = None
 
 
 class EnhancedA2AClient:
@@ -108,9 +105,7 @@ class EnhancedA2AClient:
         if self.config.custom_headers:
             headers.update(self.config.custom_headers)
 
-        self.httpx_client = httpx.AsyncClient(
-            timeout=self.config.timeout, headers=headers
-        )
+        self.httpx_client = httpx.AsyncClient(timeout=self.config.timeout, headers=headers)
 
         # Detect available implementations
         await self._detect_available_implementations()
@@ -153,9 +148,7 @@ class EnhancedA2AClient:
             logger.debug(f"SDK implementation not available: {e}")
 
         self.available_implementations = implementations
-        logger.info(
-            f"Available A2A implementations: {[impl.value for impl in implementations]}"
-        )
+        logger.info(f"Available A2A implementations: {[impl.value for impl in implementations]}")
 
     async def _initialize_sdk_client(self):
         """Initialize SDK client if available."""
@@ -172,7 +165,7 @@ class EnhancedA2AClient:
             logger.error(f"Failed to initialize SDK client: {e}")
 
     def _choose_implementation(
-        self, preferred: Optional[A2AImplementation] = None
+        self, preferred: A2AImplementation | None = None
     ) -> A2AImplementation:
         """Choose the best implementation based on preference and availability."""
         if preferred and preferred in self.available_implementations:
@@ -197,8 +190,8 @@ class EnhancedA2AClient:
 
     async def get_agent_card(
         self,
-        agent_id: Union[str, UUID],
-        implementation: Optional[A2AImplementation] = None,
+        agent_id: str | UUID,
+        implementation: A2AImplementation | None = None,
     ) -> A2AResponse:
         """
         Get agent card using the specified implementation or the best available.
@@ -257,11 +250,11 @@ class EnhancedA2AClient:
 
     async def send_message(
         self,
-        agent_id: Union[str, UUID],
+        agent_id: str | UUID,
         message: str,
-        session_id: Optional[str] = None,
-        implementation: Optional[A2AImplementation] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        session_id: str | None = None,
+        implementation: A2AImplementation | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> A2AResponse:
         """
         Send message to agent using the specified implementation.
@@ -273,9 +266,7 @@ class EnhancedA2AClient:
 
         try:
             if chosen_impl == A2AImplementation.SDK:
-                response = await self._send_message_sdk(
-                    agent_id_str, message, session_id, metadata
-                )
+                response = await self._send_message_sdk(agent_id_str, message, session_id, metadata)
             else:
                 response = await self._send_message_custom(
                     agent_id_str, message, session_id, metadata
@@ -297,7 +288,7 @@ class EnhancedA2AClient:
         agent_id: str,
         message: str,
         session_id: str,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> A2AResponse:
         """Send message using custom implementation."""
         url = f"{self.config.base_url}/api/v1/a2a/{agent_id}"
@@ -334,7 +325,7 @@ class EnhancedA2AClient:
         agent_id: str,
         message: str,
         session_id: str,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> A2AResponse:
         """Send message using SDK implementation - uses Message API according to specification."""
         if not SDK_AVAILABLE:
@@ -373,11 +364,11 @@ class EnhancedA2AClient:
 
     async def send_message_streaming(
         self,
-        agent_id: Union[str, UUID],
+        agent_id: str | UUID,
         message: str,
-        session_id: Optional[str] = None,
-        implementation: Optional[A2AImplementation] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        session_id: str | None = None,
+        implementation: A2AImplementation | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> AsyncIterator[A2AResponse]:
         """
         Send message with streaming using the specified implementation.
@@ -414,7 +405,7 @@ class EnhancedA2AClient:
         agent_id: str,
         message: str,
         session_id: str,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> AsyncIterator[A2AResponse]:
         """Send message with streaming using custom implementation - uses Task API."""
         url = f"{self.config.base_url}/api/v1/a2a/{agent_id}/subscribe"
@@ -458,7 +449,7 @@ class EnhancedA2AClient:
         agent_id: str,
         message: str,
         session_id: str,
-        metadata: Optional[Dict[str, Any]],
+        metadata: dict[str, Any] | None,
     ) -> AsyncIterator[A2AResponse]:
         """Send message with streaming using SDK implementation - uses Message API according to specification."""
         if not SDK_AVAILABLE:
@@ -501,18 +492,14 @@ class EnhancedA2AClient:
                     except json.JSONDecodeError:
                         logger.warning(f"Failed to parse SSE data: {line}")
 
-    async def compare_implementations(
-        self, agent_id: Union[str, UUID]
-    ) -> Dict[str, Any]:
+    async def compare_implementations(self, agent_id: str | UUID) -> dict[str, Any]:
         """
         Compare the two implementations for a specific agent.
         """
         agent_id_str = str(agent_id)
         comparison = {
             "agent_id": agent_id_str,
-            "available_implementations": [
-                impl.value for impl in self.available_implementations
-            ],
+            "available_implementations": [impl.value for impl in self.available_implementations],
             "custom_card": None,
             "sdk_card": None,
             "differences": [],
@@ -555,15 +542,13 @@ class EnhancedA2AClient:
 
         return comparison
 
-    async def health_check(self) -> Dict[str, Any]:
+    async def health_check(self) -> dict[str, Any]:
         """
         Check health of all available implementations.
         """
         health = {
             "client_initialized": True,
-            "available_implementations": [
-                impl.value for impl in self.available_implementations
-            ],
+            "available_implementations": [impl.value for impl in self.available_implementations],
             "implementations_health": {},
         }
 
@@ -605,9 +590,7 @@ class EnhancedA2AClient:
 
         # If we force a specific implementation, use it
         if self.config.implementation != A2AImplementation.AUTO:
-            logger.info(
-                f"Using forced implementation: {self.config.implementation.value}"
-            )
+            logger.info(f"Using forced implementation: {self.config.implementation.value}")
             return self.config.implementation
 
         # If we have agent_id, check specifically based on health check URL
@@ -616,11 +599,7 @@ class EnhancedA2AClient:
         implementations_to_try = []
 
         # If the agent_id was detected as being from a specific SDK URL, prefer SDK
-        if (
-            agent_id
-            and hasattr(self, "_prefer_sdk_from_url")
-            and self._prefer_sdk_from_url
-        ):
+        if agent_id and hasattr(self, "_prefer_sdk_from_url") and self._prefer_sdk_from_url:
             implementations_to_try = [A2AImplementation.SDK, A2AImplementation.CUSTOM]
         else:
             implementations_to_try = [A2AImplementation.CUSTOM, A2AImplementation.SDK]
@@ -643,9 +622,7 @@ class EnhancedA2AClient:
                     logger.info(f"✓ {impl.value} implementation is available")
                     return impl
                 else:
-                    logger.info(
-                        f"✗ {impl.value} implementation returned {response.status_code}"
-                    )
+                    logger.info(f"✗ {impl.value} implementation returned {response.status_code}")
             except Exception as e:
                 logger.info(f"✗ {impl.value} implementation failed: {str(e)}")
 
@@ -691,9 +668,7 @@ async def example_usage():
         agent_id = "some-agent-id"
         card_response = await client.get_agent_card(agent_id)
         if card_response.success:
-            print(
-                f"Agent card obtained using {card_response.implementation_used.value}"
-            )
+            print(f"Agent card obtained using {card_response.implementation_used.value}")
             print("Card:", card_response.data)
 
         # Send message

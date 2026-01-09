@@ -1,13 +1,15 @@
-import sendgrid
-from sendgrid.helpers.mail import Mail, Email, To, Content
 import logging
-from datetime import datetime
-from jinja2 import Environment, FileSystemLoader, select_autoescape
 import os
 import smtplib
-from email.mime.text import MIMEText
+from datetime import datetime
 from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
+
+import sendgrid
+from jinja2 import Environment, FileSystemLoader, select_autoescape
+from sendgrid.helpers.mail import Content, Email, Mail, To
+
 from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
@@ -91,13 +93,13 @@ def _send_email_smtp(to_email: str, subject: str, html_content: str) -> bool:
     """
     try:
         # Create message container
-        msg = MIMEMultipart('alternative')
-        msg['Subject'] = subject
-        msg['From'] = settings.SMTP_FROM or settings.EMAIL_FROM
-        msg['To'] = to_email
+        msg = MIMEMultipart("alternative")
+        msg["Subject"] = subject
+        msg["From"] = settings.SMTP_FROM or settings.EMAIL_FROM
+        msg["To"] = to_email
 
         # Attach HTML content
-        part = MIMEText(html_content, 'html')
+        part = MIMEText(html_content, "html")
         msg.attach(part)
 
         # Setup SMTP server
@@ -113,11 +115,7 @@ def _send_email_smtp(to_email: str, subject: str, html_content: str) -> bool:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
 
         # Send email
-        server.sendmail(
-            settings.SMTP_FROM or settings.EMAIL_FROM,
-            to_email,
-            msg.as_string()
-        )
+        server.sendmail(settings.SMTP_FROM or settings.EMAIL_FROM, to_email, msg.as_string())
         server.quit()
 
         logger.info(f"Email sent via SMTP to {to_email}")
@@ -275,23 +273,24 @@ def send_account_locked_email(
         logger.error(f"Error preparing account locked email to {email}: {str(e)}")
         return False
 
+
 def send_invite_email(email: str, password: str, role: str, organization_name: str) -> bool:
     """
     Send an invitation email to a new team member
-    
+
     Args:
         email: Recipient's email
         password: Temporary password
         role: Assigned role
         organization_name: Name of the organization
-        
+
     Returns:
         bool: True if sent successfully
     """
     try:
         subject = f"Invitation to join {organization_name} on Evo AI"
         login_link = f"{settings.APP_URL}/auth/login"
-        
+
         html_content = _render_template(
             "user_invite",
             {
@@ -300,11 +299,11 @@ def send_invite_email(email: str, password: str, role: str, organization_name: s
                 "role": role,
                 "organization_name": organization_name,
                 "current_year": datetime.now().year,
-            }
+            },
         )
-        
+
         return send_email(email, subject, html_content)
-        
+
     except Exception as e:
         logger.error(f"Error preparing invite email to {email}: {str(e)}")
         return False

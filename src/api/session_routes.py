@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
-from src.config.database import get_db
-from typing import List, Optional, Dict, Any
-import uuid
 import base64
+import logging
+import uuid
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from google.adk.sessions import Session as Adk_Session
+from sqlalchemy.orm import Session
+
+from src.config.database import get_db
 from src.core.jwt_middleware import (
     get_jwt_token,
     verify_user_client,
@@ -11,17 +14,14 @@ from src.core.jwt_middleware import (
 from src.services import (
     agent_service,
 )
-from google.adk.events import Event
-from google.adk.sessions import Session as Adk_Session
+from src.services.service_providers import artifacts_service, session_service
 from src.services.session_service import (
-    get_session_events,
-    get_session_by_id,
     delete_session,
+    get_session_by_id,
+    get_session_events,
     get_sessions_by_agent,
     get_sessions_by_client,
 )
-from src.services.service_providers import session_service, artifacts_service
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -55,9 +55,7 @@ async def get_agent_sessions(
     # Verify if the agent belongs to the user's client
     agent = agent_service.get_agent(db, agent_id)
     if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the user has access to the agent (via client)
     await verify_user_client(payload, db, agent.client_id)
@@ -74,9 +72,7 @@ async def get_session(
     # Get the session
     session = get_session_by_id(session_service, session_id)
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     # Verify if the session's agent belongs to the user's client
     agent_id = uuid.UUID(session.app_name) if session.app_name else None
@@ -105,9 +101,7 @@ async def get_agent_messages(
     # Get the session
     session = get_session_by_id(session_service, session_id)
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     # Verify if the session's agent belongs to the user's client
     agent_id = uuid.UUID(session.app_name) if session.app_name else None
@@ -153,9 +147,7 @@ async def get_agent_messages(
                         try:
                             d[i] = base64.b64encode(item).decode("utf-8")
                         except Exception as e:
-                            logger.error(
-                                f"Error encoding bytes to base64 in list: {str(e)}"
-                            )
+                            logger.error(f"Error encoding bytes to base64 in list: {str(e)}")
                             d[i] = None
                     elif isinstance(item, (dict, list)):
                         process_dict(item)
@@ -209,9 +201,7 @@ async def get_agent_messages(
                                         file_bytes
                                     ).decode("utf-8")
                                 except Exception as e:
-                                    logger.error(
-                                        f"Error encoding artifact to base64: {str(e)}"
-                                    )
+                                    logger.error(f"Error encoding artifact to base64: {str(e)}")
                                     part["inlineData"]["data"] = None
                             else:
                                 part["inlineData"]["data"] = str(file_bytes)
@@ -263,9 +253,7 @@ async def get_agent_messages(
                             f"Added artifact {filename} (v{version}) to message {event_dict.get('id')}"
                         )
                 except Exception as e:
-                    logger.error(
-                        f"Error processing artifact_delta {filename}: {str(e)}"
-                    )
+                    logger.error(f"Error processing artifact_delta {filename}: {str(e)}")
 
         processed_events.append(event_dict)
 
@@ -284,9 +272,7 @@ async def remove_session(
     # Get the session
     session = get_session_by_id(session_service, session_id)
     if not session:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Session not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
 
     # Verify if the session's agent belongs to the user's client
     agent_id = uuid.UUID(session.app_name) if session.app_name else None

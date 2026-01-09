@@ -1,12 +1,14 @@
-from passlib.context import CryptContext
-from datetime import datetime, timedelta
+import logging
 import secrets
 import string
-from jose import jwt
-from src.config.settings import settings
-import logging
-import bcrypt
 from dataclasses import dataclass
+from datetime import datetime, timedelta
+
+import bcrypt
+from jose import jwt
+from passlib.context import CryptContext
+
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -15,9 +17,9 @@ if not hasattr(bcrypt, "__about__"):
 
     @dataclass
     class BcryptAbout:
-        __version__: str = getattr(bcrypt, "__version__")
+        __version__: str = bcrypt.__version__
 
-    setattr(bcrypt, "__about__", BcryptAbout())
+    bcrypt.__about__ = BcryptAbout()
 
 # Context for password hashing using bcrypt
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -41,9 +43,7 @@ def create_jwt_token(data: dict, expires_delta: timedelta = None) -> str:
     else:
         expire = datetime.utcnow() + timedelta(minutes=settings.JWT_EXPIRATION_TIME)
     to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(
-        to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM
-    )
+    encoded_jwt = jwt.encode(to_encode, settings.JWT_SECRET_KEY, algorithm=settings.JWT_ALGORITHM)
     return encoded_jwt
 
 

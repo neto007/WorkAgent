@@ -1,23 +1,23 @@
-from crewai import Crew, Task, Agent as LlmAgent
-from src.services.crewai.session_service import (
-    CrewSessionService,
-    Event,
-    Content,
-    Part,
-    Session,
-)
-from src.services.crewai.agent_builder import AgentBuilder
-from src.utils.logger import setup_logger
-from src.core.exceptions import AgentNotFoundError, InternalServerError
-from src.services.agent_service import get_agent
-from sqlalchemy.orm import Session
-from typing import Optional, AsyncGenerator
 import asyncio
 import json
+from collections.abc import AsyncGenerator
 from datetime import datetime
-from src.utils.otel import get_tracer
+
+from crewai import Task
 from opentelemetry import trace
-import base64
+from sqlalchemy.orm import Session
+
+from src.core.exceptions import AgentNotFoundError, InternalServerError
+from src.services.agent_service import get_agent
+from src.services.crewai.agent_builder import AgentBuilder
+from src.services.crewai.session_service import (
+    Content,
+    CrewSessionService,
+    Event,
+    Session,
+)
+from src.utils.logger import setup_logger
+from src.utils.otel import get_tracer
 
 logger = setup_logger(__name__)
 
@@ -39,9 +39,9 @@ async def run_agent(
     message: str,
     session_service: CrewSessionService,
     db: Session,
-    session_id: Optional[str] = None,
+    session_id: str | None = None,
     timeout: float = 60.0,
-    files: Optional[list] = None,
+    files: list | None = None,
 ):
     tracer = get_tracer()
     with tracer.start_as_current_span(
@@ -56,18 +56,14 @@ async def run_agent(
     ):
         exit_stack = None
         try:
-            logger.info(
-                f"Starting execution of agent {agent_id} for external_id {external_id}"
-            )
+            logger.info(f"Starting execution of agent {agent_id} for external_id {external_id}")
             logger.info(f"Received message: {message}")
 
             if files and len(files) > 0:
                 logger.info(f"Received {len(files)} files with message")
 
             get_root_agent = get_agent(db, agent_id)
-            logger.info(
-                f"Root agent found: {get_root_agent.name} (type: {get_root_agent.type})"
-            )
+            logger.info(f"Root agent found: {get_root_agent.name} (type: {get_root_agent.type})")
 
             if get_root_agent is None:
                 raise AgentNotFoundError(f"Agent with ID {agent_id} not found")
@@ -135,7 +131,7 @@ async def run_agent(
 
             # Build description with history as context
             task_description = (
-                f"Conversation history:\n" + "\n".join(conversation_history)
+                "Conversation history:\n" + "\n".join(conversation_history)
                 if conversation_history
                 else ""
             )
@@ -233,12 +229,8 @@ async def run_agent(
                         p.cancel()
 
                     if not execution_completed.is_set():
-                        logger.warning(
-                            f"Agent execution timed out after {timeout} seconds"
-                        )
-                        await response_queue.put(
-                            "The response took too long and was interrupted."
-                        )
+                        logger.warning(f"Agent execution timed out after {timeout} seconds")
+                        await response_queue.put("The response took too long and was interrupted.")
 
                     final_response_text = await response_queue.get()
 
@@ -314,8 +306,8 @@ async def run_agent_stream(
     external_id: str,
     message: str,
     db: Session,
-    session_id: Optional[str] = None,
-    files: Optional[list] = None,
+    session_id: str | None = None,
+    files: list | None = None,
 ) -> AsyncGenerator[str, None]:
     tracer = get_tracer()
     span = tracer.start_span(
@@ -397,18 +389,12 @@ async def run_agent_stream(
                         if event.author and event.content and event.content.parts:
                             for part in event.content.parts:
                                 if isinstance(part, dict) and "text" in part:
-                                    role = (
-                                        "User"
-                                        if event.author == "user"
-                                        else "Assistant"
-                                    )
-                                    conversation_history.append(
-                                        f"{role}: {part['text']}"
-                                    )
+                                    role = "User" if event.author == "user" else "Assistant"
+                                    conversation_history.append(f"{role}: {part['text']}")
 
                 # Build description with history
                 task_description = (
-                    f"Conversation history:\n" + "\n".join(conversation_history)
+                    "Conversation history:\n" + "\n".join(conversation_history)
                     if conversation_history
                     else ""
                 )
@@ -458,9 +444,7 @@ async def run_agent_stream(
                             # Also add user message if it doesn't exist yet
                             if not any(
                                 e.author == "user"
-                                and any(
-                                    p.get("text") == message for p in e.content.parts
-                                )
+                                and any(p.get("text") == message for p in e.content.parts)
                                 for e in session.events
                                 if e.content and e.content.parts
                             ):
@@ -558,9 +542,7 @@ async def run_agent_stream(
                 logger.error(f"Error processing request: {str(e)}")
                 raise InternalServerError(str(e)) from e
             except Exception as e:
-                logger.error(
-                    f"Internal error processing request: {str(e)}", exc_info=True
-                )
+                logger.error(f"Internal error processing request: {str(e)}", exc_info=True)
                 raise InternalServerError(str(e))
     finally:
         span.end()

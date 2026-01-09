@@ -1,23 +1,26 @@
+import json
+import logging
+import uuid
+from typing import Any
+
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
-    status,
-    Header,
-    Query,
     File,
-    UploadFile,
     Form,
+    Header,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
 )
 from sqlalchemy.orm import Session
+
 from src.config.database import get_db
-from typing import List, Dict, Any, Optional, Union
-import uuid
 from src.core.jwt_middleware import (
     get_jwt_token,
-    get_jwt_token,
-    verify_user_client,
     verify_role,
+    verify_user_client,
 )
 from src.schemas.schemas import (
     Agent,
@@ -29,16 +32,14 @@ from src.schemas.schemas import (
     ApiKeyCreate,
     ApiKeyUpdate,
 )
-from src.services import agent_service, mcp_server_service, apikey_service
-import logging
-import json
+from src.services import agent_service, apikey_service, mcp_server_service
 
 logger = logging.getLogger(__name__)
 
 
 async def format_agent_tools(
-    mcp_servers: List[Dict[str, Any]], db: Session
-) -> List[Dict[str, Any]]:
+    mcp_servers: list[dict[str, Any]], db: Session
+) -> list[dict[str, Any]]:
     """Format MCP server tools for agent card skills"""
     formatted_tools = []
 
@@ -66,9 +67,7 @@ async def format_agent_tools(
                 formatted_tools.append(formatted_tool)
 
         except Exception as e:
-            logger.error(
-                f"Error formatting tools for MCP server {server.get('id')}: {str(e)}"
-            )
+            logger.error(f"Error formatting tools for MCP server {server.get('id')}: {str(e)}")
             continue
 
     return formatted_tools
@@ -91,21 +90,17 @@ async def create_api_key(
     await verify_role("editor", payload)
     await verify_user_client(payload, db, key.client_id)
 
-    db_key = apikey_service.create_api_key(
-        db, key.client_id, key.name, key.provider, key.key_value
-    )
+    db_key = apikey_service.create_api_key(db, key.client_id, key.name, key.provider, key.key_value)
 
     return db_key
 
 
-@router.get("/apikeys", response_model=List[ApiKey])
+@router.get("/apikeys", response_model=list[ApiKey])
 async def read_api_keys(
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
     skip: int = 0,
     limit: int = 100,
-    sort_by: str = Query(
-        "name", description="Field to sort: name, provider, created_at"
-    ),
+    sort_by: str = Query("name", description="Field to sort: name, provider, created_at"),
     sort_direction: str = Query("asc", description="Sort direction: asc, desc"),
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
@@ -133,9 +128,7 @@ async def read_api_key(
 
     key = apikey_service.get_api_key(db, key_id)
     if not key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
     # Verify if the key belongs to the specified client
     if key.client_id != x_client_id:
@@ -160,9 +153,7 @@ async def get_api_key_value(
 
     key = apikey_service.get_api_key(db, key_id)
     if not key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
     # Verify if the key belongs to the specified client
     if key.client_id != x_client_id:
@@ -175,8 +166,7 @@ async def get_api_key_value(
     decrypted_value = apikey_service.get_decrypted_api_key(db, key_id)
     if decrypted_value is None:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to decrypt API key"
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to decrypt API key"
         )
 
     return {"key_value": decrypted_value}
@@ -198,9 +188,7 @@ async def update_api_key(
     # Verify if the key exists
     key = apikey_service.get_api_key(db, key_id)
     if not key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
     # Verify if the key belongs to the specified client
     if key.client_id != x_client_id:
@@ -236,9 +224,7 @@ async def delete_api_key(
     # Verify if the key exists
     key = apikey_service.get_api_key(db, key_id)
     if not key:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
     # Verify if the key belongs to the specified client
     if key.client_id != x_client_id:
@@ -249,15 +235,11 @@ async def delete_api_key(
 
     # Deactivate the key
     if not apikey_service.delete_api_key(db, key_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found")
 
 
 # Agent folder routes
-@router.post(
-    "/folders", response_model=AgentFolder, status_code=status.HTTP_201_CREATED
-)
+@router.post("/folders", response_model=AgentFolder, status_code=status.HTTP_201_CREATED)
 async def create_folder(
     folder: AgentFolderCreate,
     db: Session = Depends(get_db),
@@ -267,12 +249,10 @@ async def create_folder(
     # Verify if the user has access to the folder's client
     await verify_user_client(payload, db, folder.client_id)
 
-    return agent_service.create_agent_folder(
-        db, folder.client_id, folder.name, folder.description
-    )
+    return agent_service.create_agent_folder(db, folder.client_id, folder.name, folder.description)
 
 
-@router.get("/folders", response_model=List[AgentFolder])
+@router.get("/folders", response_model=list[AgentFolder])
 async def read_folders(
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
     skip: int = 0,
@@ -300,9 +280,7 @@ async def read_folder(
 
     folder = agent_service.get_agent_folder(db, folder_id)
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
     # Verify if the folder belongs to the specified client
     if folder.client_id != x_client_id:
@@ -330,9 +308,7 @@ async def update_folder(
     # Verify if the folder exists
     folder = agent_service.get_agent_folder(db, folder_id)
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
     # Verify if the folder belongs to the specified client
     if folder.client_id != x_client_id:
@@ -362,9 +338,7 @@ async def delete_folder(
     # Verify if the folder exists
     folder = agent_service.get_agent_folder(db, folder_id)
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
     # Verify if the folder belongs to the specified client
     if folder.client_id != x_client_id:
@@ -375,12 +349,10 @@ async def delete_folder(
 
     # Delete the folder
     if not agent_service.delete_agent_folder(db, folder_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
 
-@router.get("/folders/{folder_id}/agents", response_model=List[Agent])
+@router.get("/folders/{folder_id}/agents", response_model=list[Agent])
 async def read_folder_agents(
     folder_id: uuid.UUID,
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
@@ -396,9 +368,7 @@ async def read_folder_agents(
     # Verify if the folder exists
     folder = agent_service.get_agent_folder(db, folder_id)
     if not folder:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
     # Verify if the folder belongs to the specified client
     if folder.client_id != x_client_id:
@@ -421,7 +391,7 @@ async def read_folder_agents(
 @router.put("/{agent_id}/folder", response_model=Agent)
 async def assign_agent_to_folder(
     agent_id: uuid.UUID,
-    folder_id: Optional[uuid.UUID] = None,
+    folder_id: uuid.UUID | None = None,
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
@@ -433,9 +403,7 @@ async def assign_agent_to_folder(
     # Verify if the agent exists
     agent = agent_service.get_agent(db, agent_id)
     if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the agent belongs to the specified client
     if agent.client_id != x_client_id:
@@ -448,9 +416,7 @@ async def assign_agent_to_folder(
     if folder_id:
         folder = agent_service.get_agent_folder(db, folder_id)
         if not folder:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Folder not found")
 
         if folder.client_id != x_client_id:
             raise HTTPException(
@@ -468,12 +434,12 @@ async def assign_agent_to_folder(
 
 
 # Agent routes (after specific routes)
-@router.get("/", response_model=List[Agent])
+@router.get("/", response_model=list[Agent])
 async def read_agents(
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
     skip: int = 0,
     limit: int = 100,
-    folder_id: Optional[uuid.UUID] = Query(None, description="Filter by folder"),
+    folder_id: uuid.UUID | None = Query(None, description="Filter by folder"),
     sort_by: str = Query("name", description="Field to sort: name, created_at"),
     sort_direction: str = Query("asc", description="Sort direction: asc, desc"),
     db: Session = Depends(get_db),
@@ -513,15 +479,12 @@ async def create_agent(
         return db_agent
     except ValueError as e:
         logger.error(f"Validation error creating agent: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error creating agent: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create agent: {str(e)}"
+            detail=f"Failed to create agent: {str(e)}",
         )
 
 
@@ -534,9 +497,7 @@ async def read_agent(
 ):
     db_agent = agent_service.get_agent(db, agent_id)
     if db_agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the user has access to the agent's client
     await verify_user_client(payload, db, x_client_id)
@@ -550,7 +511,7 @@ async def read_agent(
 @router.put("/{agent_id}", response_model=Agent)
 async def update_agent(
     agent_id: uuid.UUID,
-    agent_data: Dict[str, Any],
+    agent_data: dict[str, Any],
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
@@ -559,9 +520,7 @@ async def update_agent(
         # Get the current agent
         db_agent = agent_service.get_agent(db, agent_id)
         if db_agent is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
         # Verify if the user has access to the agent's client
         await verify_user_client(payload, db, db_agent.client_id)
@@ -579,22 +538,19 @@ async def update_agent(
         return updated_agent
     except ValueError as e:
         logger.error(f"Validation error updating agent {agent_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error updating agent {agent_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update agent: {str(e)}"
+            detail=f"Failed to update agent: {str(e)}",
         )
 
 
 @router.put("/{agent_id}/workflow", response_model=Agent)
 async def update_agent_workflow(
     agent_id: uuid.UUID,
-    workflow_data: Dict[str, Any],
+    workflow_data: dict[str, Any],
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
@@ -604,9 +560,7 @@ async def update_agent_workflow(
         # Get the current agent
         db_agent = agent_service.get_agent(db, agent_id)
         if db_agent is None:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-            )
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
         # Verify if the user has access to the agent's client
         await verify_user_client(payload, db, db_agent.client_id)
@@ -615,7 +569,7 @@ async def update_agent_workflow(
         if "workflow" not in workflow_data:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="workflow field is required"
+                detail="workflow field is required",
             )
 
         # Merge new workflow with existing config
@@ -629,22 +583,19 @@ async def update_agent_workflow(
 
         # Update the agent
         updated_agent = await agent_service.update_agent(db, agent_id, {"config": new_config})
-        
+
         if not updated_agent.agent_card_url:
             updated_agent.agent_card_url = updated_agent.agent_card_url_property
 
         return updated_agent
     except ValueError as e:
         logger.error(f"Validation error updating agent workflow {agent_id}: {str(e)}")
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=str(e)
-        )
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e))
     except Exception as e:
         logger.error(f"Unexpected error updating agent workflow {agent_id}: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update agent workflow: {str(e)}"
+            detail=f"Failed to update agent workflow: {str(e)}",
         )
 
 
@@ -658,20 +609,16 @@ async def delete_agent(
     # Get the agent
     db_agent = agent_service.get_agent(db, agent_id)
     if db_agent is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the user has access to the agent's client
     await verify_user_client(payload, db, db_agent.client_id)
 
     if not agent_service.delete_agent(db, agent_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
 
-@router.post("/{agent_id}/share", response_model=Dict[str, str])
+@router.post("/{agent_id}/share", response_model=dict[str, str])
 async def share_agent(
     agent_id: uuid.UUID,
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
@@ -684,9 +631,7 @@ async def share_agent(
     # Verify if the agent exists
     agent = agent_service.get_agent(db, agent_id)
     if not agent:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the agent belongs to the specified client
     if agent.client_id != x_client_id:
@@ -715,15 +660,11 @@ async def get_shared_agent(
     # Verify if the agent exists
     agent = agent_service.get_agent(db, agent_id)
     if not agent or not agent.config:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found")
 
     # Verify if the API key matches
     if not agent.config.get("api_key") or agent.config.get("api_key") != api_key:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
 
     # Add agent card URL if not present
     if not agent.agent_card_url:
@@ -732,10 +673,10 @@ async def get_shared_agent(
     return agent
 
 
-@router.post("/import", response_model=List[Agent], status_code=status.HTTP_201_CREATED)
+@router.post("/import", response_model=list[Agent], status_code=status.HTTP_201_CREATED)
 async def import_agents(
     file: UploadFile = File(...),
-    folder_id: Optional[str] = Form(None),
+    folder_id: str | None = Form(None),
     x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),

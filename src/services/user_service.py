@@ -1,16 +1,17 @@
-from sqlalchemy.orm import Session
-from sqlalchemy.exc import SQLAlchemyError
-from src.models.models import User, Client
-from src.schemas.user import UserCreate
-from src.utils.security import get_password_hash, verify_password, generate_token
-from src.services.email_service import (
-    send_verification_email,
-    send_password_reset_email,
-)
-from datetime import datetime, timedelta, timezone
-import uuid
 import logging
-from typing import Optional, Tuple
+import uuid
+from datetime import UTC, datetime, timedelta
+
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
+
+from src.models.models import Client, User
+from src.schemas.user import UserCreate
+from src.services.email_service import (
+    send_password_reset_email,
+    send_verification_email,
+)
+from src.utils.security import generate_token, get_password_hash, verify_password
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +20,9 @@ def create_user(
     db: Session,
     user_data: UserCreate,
     is_admin: bool = False,
-    client_id: Optional[uuid.UUID] = None,
+    client_id: uuid.UUID | None = None,
     auto_verify: bool = False,
-) -> Tuple[Optional[User], str]:
+) -> tuple[User | None, str]:
     """
     Creates a new user in the system
 
@@ -39,9 +40,7 @@ def create_user(
         # Check if email already exists
         db_user = db.query(User).filter(User.email == user_data.email).first()
         if db_user:
-            logger.warning(
-                f"Attempt to register with existing email: {user_data.email}"
-            )
+            logger.warning(f"Attempt to register with existing email: {user_data.email}")
             return None, "Email already registered"
 
         # Create verification token if needed
@@ -106,7 +105,7 @@ def create_user(
         return None, f"Unexpected error: {str(e)}"
 
 
-def verify_email(db: Session, token: str) -> Tuple[bool, str]:
+def verify_email(db: Session, token: str) -> tuple[bool, str]:
     """
     Verify the user's email using the provided token
 
@@ -138,9 +137,7 @@ def verify_email(db: Session, token: str) -> Tuple[bool, str]:
             expiry = expiry.replace(tzinfo=now.tzinfo)
 
         if expiry < now:
-            logger.warning(
-                f"Attempt to verify with expired token for user: {user.email}"
-            )
+            logger.warning(f"Attempt to verify with expired token for user: {user.email}")
             return False, "Verification token expired"
 
         # Update user
@@ -163,7 +160,7 @@ def verify_email(db: Session, token: str) -> Tuple[bool, str]:
         return False, f"Unexpected error: {str(e)}"
 
 
-def resend_verification(db: Session, email: str) -> Tuple[bool, str]:
+def resend_verification(db: Session, email: str) -> tuple[bool, str]:
     """
     Resend the verification email
 
@@ -179,15 +176,11 @@ def resend_verification(db: Session, email: str) -> Tuple[bool, str]:
         user = db.query(User).filter(User.email == email).first()
 
         if not user:
-            logger.warning(
-                f"Attempt to resend verification email for non-existent email: {email}"
-            )
+            logger.warning(f"Attempt to resend verification email for non-existent email: {email}")
             return False, "Email not found"
 
         if user.email_verified:
-            logger.info(
-                f"Attempt to resend verification email for already verified email: {email}"
-            )
+            logger.info(f"Attempt to resend verification email for already verified email: {email}")
             return False, "Email already verified"
 
         # Generate new token
@@ -219,7 +212,7 @@ def resend_verification(db: Session, email: str) -> Tuple[bool, str]:
         return False, f"Unexpected error: {str(e)}"
 
 
-def forgot_password(db: Session, email: str) -> Tuple[bool, str]:
+def forgot_password(db: Session, email: str) -> tuple[bool, str]:
     """
     Initiates the password recovery process
 
@@ -274,7 +267,7 @@ def forgot_password(db: Session, email: str) -> Tuple[bool, str]:
         return False, f"Unexpected error: {str(e)}"
 
 
-def reset_password(db: Session, token: str, new_password: str) -> Tuple[bool, str]:
+def reset_password(db: Session, token: str, new_password: str) -> tuple[bool, str]:
     """
     Resets the user's password using the provided token
 
@@ -295,14 +288,12 @@ def reset_password(db: Session, token: str, new_password: str) -> Tuple[bool, st
             return False, "Invalid password reset token"
 
         # Check if the token has expired
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         expiry = user.password_reset_expiry
         if expiry is not None and expiry.tzinfo is None:
-            expiry = expiry.replace(tzinfo=timezone.utc)
+            expiry = expiry.replace(tzinfo=UTC)
         if expiry is None or expiry < now:
-            logger.warning(
-                f"Attempt to reset password with expired token for user: {user.email}"
-            )
+            logger.warning(f"Attempt to reset password with expired token for user: {user.email}")
             return False, "Password reset token expired"
 
         # Update password
@@ -327,7 +318,7 @@ def reset_password(db: Session, token: str, new_password: str) -> Tuple[bool, st
         return False, f"Unexpected error: {str(e)}"
 
 
-def get_user_by_email(db: Session, email: str) -> Optional[User]:
+def get_user_by_email(db: Session, email: str) -> User | None:
     """
     Searches for a user by email
 
@@ -345,9 +336,7 @@ def get_user_by_email(db: Session, email: str) -> Optional[User]:
         return None
 
 
-def authenticate_user(
-    db: Session, email: str, password: str
-) -> Tuple[Optional[User], str]:
+def authenticate_user(db: Session, email: str, password: str) -> tuple[User | None, str]:
     """
     Authenticates a user with email and password
 
@@ -397,7 +386,7 @@ def get_admin_users(db: Session, skip: int = 0, limit: int = 100):
         return []
 
 
-def create_admin_user(db: Session, user_data: UserCreate) -> Tuple[Optional[User], str]:
+def create_admin_user(db: Session, user_data: UserCreate) -> tuple[User | None, str]:
     """
     Creates a new admin user
 
@@ -411,7 +400,7 @@ def create_admin_user(db: Session, user_data: UserCreate) -> Tuple[Optional[User
     return create_user(db, user_data, is_admin=True, auto_verify=True)
 
 
-def deactivate_user(db: Session, user_id: uuid.UUID) -> Tuple[bool, str]:
+def deactivate_user(db: Session, user_id: uuid.UUID) -> tuple[bool, str]:
     """
     Deactivates a user (does not delete, only marks as inactive)
 
@@ -449,7 +438,7 @@ def deactivate_user(db: Session, user_id: uuid.UUID) -> Tuple[bool, str]:
 
 def change_password(
     db: Session, user_id: uuid.UUID, current_password: str, new_password: str
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     """
     Changes the password of an authenticated user
 
@@ -467,9 +456,7 @@ def change_password(
         user = db.query(User).filter(User.id == user_id).first()
 
         if not user:
-            logger.warning(
-                f"Attempt to change password for non-existent user: {user_id}"
-            )
+            logger.warning(f"Attempt to change password for non-existent user: {user_id}")
             return False, "User not found"
 
         # Verify current password

@@ -1,5 +1,6 @@
 import asyncio
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+
 from fastapi import HTTPException
 
 
@@ -25,12 +26,10 @@ class SSEUtils:
                 async for event in asyncio.wait_for(generator, timeout):
                     yield event
                 break
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 attempts += 1
                 if attempts >= retry_attempts:
-                    raise HTTPException(
-                        status_code=408, detail="Timeout after multiple attempts"
-                    )
+                    raise HTTPException(status_code=408, detail="Timeout after multiple attempts")
                 await asyncio.sleep(1)  # Wait before trying again
 
     @staticmethod
@@ -65,6 +64,4 @@ class SSEUtils:
 
         for header, value in required_headers.items():
             if headers.get(header) != value:
-                raise HTTPException(
-                    status_code=400, detail=f"Invalid or missing header: {header}"
-                )
+                raise HTTPException(status_code=400, detail=f"Invalid or missing header: {header}")

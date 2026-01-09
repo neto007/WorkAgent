@@ -1,9 +1,11 @@
-from typing import Any, Dict, List, Type
-from crewai.tools import BaseTool, tool
-import requests
 import json
-from src.utils.logger import setup_logger
+from typing import Any
+
+import requests
+from crewai.tools import BaseTool, tool
 from pydantic import BaseModel, Field, create_model
+
+from src.utils.logger import setup_logger
 
 logger = setup_logger(__name__)
 
@@ -12,7 +14,7 @@ class CustomToolBuilder:
     def __init__(self):
         self.tools = []
 
-    def _create_http_tool(self, tool_config: Dict[str, Any]) -> BaseTool:
+    def _create_http_tool(self, tool_config: dict[str, Any]) -> BaseTool:
         """Create an HTTP tool based on the provided configuration."""
         # Extract configuration parameters
         name = tool_config["name"]
@@ -33,9 +35,7 @@ class CustomToolBuilder:
 
         # Add all parameters as fields
         for param in (
-            list(path_params.keys())
-            + list(query_params.keys())
-            + list(body_params.keys())
+            list(path_params.keys()) + list(query_params.keys()) + list(body_params.keys())
         ):
             # Default to string type for all parameters
             field_definitions[param] = (
@@ -53,9 +53,7 @@ class CustomToolBuilder:
                 )
 
         # Create dynamic input schema model in line with the documentation
-        tool_input_model = create_model(
-            f"{name.replace(' ', '')}Input", **field_definitions
-        )
+        tool_input_model = create_model(f"{name.replace(' ', '')}Input", **field_definitions)
 
         # Create the HTTP tool using crewai's BaseTool class
         # Following the pattern in the documentation
@@ -68,7 +66,7 @@ class CustomToolBuilder:
             class HttpTool(BaseTool):
                 name: str = _name
                 description: str = _description
-                args_schema: Type[BaseModel] = _tool_input_model
+                args_schema: type[BaseModel] = _tool_input_model
 
                 def _run(self, **kwargs):
                     """Execute the HTTP request and return the result."""
@@ -86,9 +84,7 @@ class CustomToolBuilder:
                         url = endpoint
                         for param, value in path_params.items():
                             if param in all_values:
-                                url = url.replace(
-                                    f"{{{param}}}", str(all_values[param])
-                                )
+                                url = url.replace(f"{{{param}}}", str(all_values[param]))
 
                         # Process query parameters
                         query_params_dict = {}
@@ -105,10 +101,7 @@ class CustomToolBuilder:
 
                         # Adds default values to query params if they are not present
                         for param, value in values.items():
-                            if (
-                                param not in query_params_dict
-                                and param not in path_params
-                            ):
+                            if param not in query_params_dict and param not in path_params:
                                 query_params_dict[param] = value
 
                         body_data = {}
@@ -175,7 +168,7 @@ class CustomToolBuilder:
 
         return http_tool
 
-    def _create_http_tool_with_decorator(self, tool_config: Dict[str, Any]) -> Any:
+    def _create_http_tool_with_decorator(self, tool_config: dict[str, Any]) -> Any:
         """Create an HTTP tool using the tool decorator."""
         # Extract configuration parameters
         name = tool_config["name"]
@@ -192,11 +185,7 @@ class CustomToolBuilder:
         body_params = parameters.get("body_params") or {}
 
         # Create function docstring with parameter documentation
-        param_list = (
-            list(path_params.keys())
-            + list(query_params.keys())
-            + list(body_params.keys())
-        )
+        param_list = list(path_params.keys()) + list(query_params.keys()) + list(body_params.keys())
         doc_params = []
         for param in param_list:
             doc_params.append(f"    {param}: Parameter description")
@@ -306,7 +295,7 @@ class CustomToolBuilder:
 
         return http_tool
 
-    def build_tools(self, tools_config: Dict[str, Any]) -> List[BaseTool]:
+    def build_tools(self, tools_config: dict[str, Any]) -> list[BaseTool]:
         """Builds a list of tools based on the provided configuration. Accepts both 'tools' and 'custom_tools' (with http_tools)."""
         self.tools = []
 
@@ -314,9 +303,7 @@ class CustomToolBuilder:
         http_tools = []
         if tools_config.get("http_tools"):
             http_tools = tools_config.get("http_tools", [])
-        elif tools_config.get("custom_tools") and tools_config["custom_tools"].get(
-            "http_tools"
-        ):
+        elif tools_config.get("custom_tools") and tools_config["custom_tools"].get("http_tools"):
             http_tools = tools_config["custom_tools"].get("http_tools", [])
         elif (
             tools_config.get("tools")
@@ -331,9 +318,7 @@ class CustomToolBuilder:
         # Create tools for each HTTP tool configuration
         for http_tool_config in http_tools:
             if use_decorator:
-                self.tools.append(
-                    self._create_http_tool_with_decorator(http_tool_config)
-                )
+                self.tools.append(self._create_http_tool_with_decorator(http_tool_config))
             else:
                 self.tools.append(self._create_http_tool(http_tool_config))
 
