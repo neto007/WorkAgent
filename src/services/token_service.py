@@ -35,10 +35,15 @@ class TokenService:
         Returns:
             Tupla (access_token, refresh_token)
         """
+        # Buscar usuário do banco
+        from src.services.user_service import get_user_by_id
+
+        user = get_user_by_id(db, user_id)
+        if not user:
+            raise ValueError(f"User {user_id} not found")
+
         # Criar access token (curto)
-        access_token = create_access_token(
-            data={"sub": user_id}, expires_delta=self.ACCESS_TOKEN_EXPIRE
-        )
+        access_token = create_access_token(user)
 
         # Criar refresh token (longo)
         refresh_token_raw = secrets.token_urlsafe(32)
@@ -86,10 +91,16 @@ class TokenService:
             logger.warning(f"Invalid or expired refresh token")
             return None
 
+        # Buscar usuário
+        from src.services.user_service import get_user_by_id
+
+        user = get_user_by_id(db, str(db_token.user_id))
+        if not user:
+            logger.warning(f"User not found for refresh token")
+            return None
+
         # Criar novo access token
-        access_token = create_access_token(
-            data={"sub": str(db_token.user_id)}, expires_delta=self.ACCESS_TOKEN_EXPIRE
-        )
+        access_token = create_access_token(user)
 
         logger.info(f"Refreshed access token for user {db_token.user_id}")
         return access_token

@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef, type FormEvent } from 'react';
 import { Mail, Lock, LogIn, Cpu, AlertCircle, Loader2, User, CheckCircle2 } from 'lucide-react';
-import { login, register, forgotPassword } from '@/services/authService';
+import { login, register, forgotPassword, getMe } from '@/services/authService';
+import { useAuth } from '@/contexts/AuthContext';
 
 type TabType = 'login' | 'register' | 'forgot';
 
 const LoginPage: React.FC = () => {
+    const auth = useAuth();
     const [activeTab, setActiveTab] = useState<TabType>('login');
     const [isLoading, setIsLoading] = useState(false);
     const [loginError, setLoginError] = useState('');
@@ -44,12 +46,16 @@ const LoginPage: React.FC = () => {
                 password: loginData.password,
             });
 
-            // Cookie é setado automaticamente pelo backend via set-cookie header
-            // Não chamamos getMe() aqui - o navegador precisa processar o cookie primeiro
-            // O AuthContext fará a validação quando a página /agents carregar
-            if (response.data.access_token) {
-                // Redirect para a página protegida
-                // O ProtectedRoute vai aguardar o AuthContext validar a sessão
+            const { data } = response;
+
+            if (data.access_token && data.refresh_token) {
+                // Buscar dados do usuário
+                const meResponse = await getMe();
+
+                // Atualizar AuthContext com tokens e usuário
+                auth.login(data.access_token, data.refresh_token, meResponse.data);
+
+                // Redirecionar para página protegida
                 window.location.href = '/agents';
             }
         } catch (error: any) {
