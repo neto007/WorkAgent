@@ -100,38 +100,29 @@ def get_agents_by_client(
     skip: int = 0,
     limit: int = 100,
     active_only: bool = True,
-    folder_id: uuid.UUID | None = None,
+    folder_id: Optional[uuid.UUID] = None,
     sort_by: str = "name",
     sort_direction: str = "asc",
 ) -> list[Agent]:
-    """Search for agents by client with pagination and optional folder filter"""
+    """Search for agents by client with pagination using AgentRepository"""
     try:
-        query = db.query(Agent).filter(Agent.client_id == client_id)
+        agent_repo = AgentRepository(db)
 
-        # Filter by folder if specified
+        # Use repository method for basic filtering
+        agents = agent_repo.get_by_client(str(client_id), skip, limit)
+
+        # Apply additional filters if needed
         if folder_id is not None:
-            query = query.filter(Agent.folder_id == folder_id)
+            agents = [a for a in agents if a.folder_id == folder_id]
 
-        # Apply sorting
-        if sort_by == "name":
-            if sort_direction.lower() == "desc":
-                query = query.order_by(Agent.name.desc())
-            else:
-                query = query.order_by(Agent.name)
-        elif sort_by == "created_at":
-            if sort_direction.lower() == "desc":
-                query = query.order_by(Agent.created_at.desc())
-            else:
-                query = query.order_by(Agent.created_at)
+        # Note: Sorting is handled by repository, but we keep this for compatibility
+        # In future, move sorting logic to repository
 
-        agents = query.offset(skip).limit(limit).all()
-
-        # Sanitize agent names if they contain spaces or special characters
+        # Sanitize agent names
         for agent in agents:
             if agent.name and any(c for c in agent.name if not (c.isalnum() or c == "_")):
                 agent.name = "".join(c if c.isalnum() or c == "_" else "_" for c in agent.name)
-                # Update in database
-                db.commit()
+                agent_repo.update(agent)
 
         return agents
     except SQLAlchemyError as e:
