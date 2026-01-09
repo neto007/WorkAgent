@@ -141,12 +141,7 @@ class MCPService:
                                 "Reached 50 pages limit, stopping pagination safety break."
                             )
                             break
-                except (anyio.ExceptionGroup, TimeoutError, Exception) as e:
-                    logger.warning(f"Failed to connect or list tools from custom MCP server: {e}")
-                    # If we already have some tools, we can continue, but usually [] is safer if failed early
-                    if not all_mcp_tools:
-                        return [], None
-                except Exception as e:
+                except (TimeoutError, Exception) as e:
                     logger.warning(f"Failed to connect or list tools from custom MCP server: {e}")
                     # If we already have some tools, we can continue, but usually [] is safer if failed early
                     if not all_mcp_tools:
