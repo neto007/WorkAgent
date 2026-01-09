@@ -15,3 +15,9 @@ export const getMe = () =>
 
 export const changePassword = (data: import('@/types/auth').ChangePasswordRequest) =>
     api.post('/api/v1/auth/change-password', data);
+
+export const refreshToken = (refreshToken: string) =>
+    api.post<LoginResponse>('/api/v1/auth/refresh', { refresh_token: refreshToken });
+
+export const logout = (refreshToken?: string) =>
+    api.post('/api/v1/auth/logout', refreshToken ? { refresh_token: refreshToken } : {});

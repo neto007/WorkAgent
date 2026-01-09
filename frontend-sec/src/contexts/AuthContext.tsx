@@ -5,9 +5,10 @@ import type { MeResponse } from '@/types/auth';
 interface AuthContextType {
     user: MeResponse | null;
     token: string | null;
+    refreshToken: string | null;
     isAuthenticated: boolean;
     isLoading: boolean;
-    login: (token: string, user: MeResponse) => void;
+    login: (token: string, refreshToken: string, user: MeResponse) => void;
     logout: () => void;
     updateUser: (user: MeResponse) => void;
 }
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<MeResponse | null>(null);
     const [token, setToken] = useState<string | null>(null);
+    const [refreshToken, setRefreshToken] = useState<string | null>(null);
 
     const [isLoading, setIsLoading] = useState(true);
 
@@ -28,11 +30,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 if (response.data) {
                     setUser(response.data);
                     setToken('cookie-session'); // Dummy value to indicate auth
+                    // Try to get refresh_token from localStorage
+                    const storedRefreshToken = localStorage.getItem('refresh_token');
+                    if (storedRefreshToken) {
+                        setRefreshToken(storedRefreshToken);
+                    }
                 }
             } catch (error) {
                 // Session invalid or expired
                 setUser(null);
                 setToken(null);
+                setRefreshToken(null);
             } finally {
                 setIsLoading(false);
             }
@@ -40,23 +48,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         initAuth();
     }, []);
 
-    const login = (newToken: string, newUser: MeResponse) => {
-        setToken(newToken || 'cookie-session'); // newToken comes from response body, but we might rely on cookie
+    const login = (newToken: string, newRefreshToken: string, newUser: MeResponse) => {
+        setToken(newToken || 'cookie-session');
+        setRefreshToken(newRefreshToken);
         setUser(newUser);
-        // We do NOT store token in localStorage anymore
-        localStorage.setItem('user', JSON.stringify(newUser)); // Optional: cache user info
+        // Store refresh_token in localStorage
+        localStorage.setItem('refresh_token', newRefreshToken);
+        localStorage.setItem('user', JSON.stringify(newUser));
     };
 
     const logout = async () => {
         try {
-            // Import axios instance to call logout endpoint
-            const { default: api } = await import('@/services/api');
-            await api.post('/auth/logout');
+            // Import logout function
+            const { logout: logoutApi } = await import('@/services/authService');
+            // Call logout with refresh_token to revoke it
+            await logoutApi(refreshToken || undefined);
         } catch (e) {
             console.error(e);
         }
         setToken(null);
+        setRefreshToken(null);
         setUser(null);
+        localStorage.removeItem('refresh_token');
         localStorage.removeItem('user');
     };
 
@@ -68,6 +81,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const value: AuthContextType = {
         user,
         token,
+        refreshToken,
         isAuthenticated: !!token && !!user,
         isLoading,
         login,
