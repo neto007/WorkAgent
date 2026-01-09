@@ -9,6 +9,9 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import logging
+from dotenv import load_dotenv
+
+load_dotenv()
 
 logger = logging.getLogger(__name__)
 
@@ -58,7 +61,7 @@ class SecretsManager:
 
         try:
             encrypted = self.cipher.encrypt(value.encode())
-            return base64.urlsafe_b64encode(encrypted).decode()
+            return encrypted.decode()
         except Exception as e:
             logger.error(f"Error encrypting value: {e}")
             raise
@@ -68,7 +71,7 @@ class SecretsManager:
         Descriptografa um valor.
 
         Args:
-            encrypted_value: Valor criptografado em base64
+            encrypted_value: Valor criptografado (Fernet token)
 
         Returns:
             Valor descriptografado
@@ -77,8 +80,7 @@ class SecretsManager:
             return ""
 
         try:
-            encrypted = base64.urlsafe_b64decode(encrypted_value.encode())
-            decrypted = self.cipher.decrypt(encrypted)
+            decrypted = self.cipher.decrypt(encrypted_value.encode())
             return decrypted.decode()
         except Exception as e:
             logger.error(f"Error decrypting value: {e}")
