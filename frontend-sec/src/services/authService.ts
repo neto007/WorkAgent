@@ -11,7 +11,7 @@ export const forgotPassword = (data: ForgotPasswordRequest) =>
     api.post('/api/v1/auth/forgot-password', data);
 
 export const getMe = () =>
-    api.post<MeResponse>('/api/v1/auth/me');
+    api.get<MeResponse>('/api/v1/auth/me');
 
 export const changePassword = (data: import('@/types/auth').ChangePasswordRequest) =>
     api.post('/api/v1/auth/change-password', data);
