@@ -25,18 +25,20 @@ def upgrade() -> None:
     op.create_index("idx_agents_name", "agents", ["name"])
     op.create_index("idx_agents_client_id", "agents", ["client_id"])
     op.create_index("idx_agents_type", "agents", ["type"])
+    op.create_index("idx_agents_folder_id", "agents", ["folder_id"])
 
-    # Sessions - busca por user e agent
+    # Sessions - busca por user
     op.create_index("idx_sessions_user_id", "sessions", ["user_id"])
-    op.create_index("idx_sessions_agent_id", "sessions", ["agent_id"])
-    op.create_index("idx_sessions_created_at", "sessions", ["created_at"])
+    op.create_index("idx_sessions_app_name", "sessions", ["app_name"])
 
-    # API Keys - busca por key hash
-    op.create_index("idx_api_keys_key_hash", "api_keys", ["key_hash"])
+    # API Keys - busca por client e status
+    op.create_index("idx_api_keys_client_id", "api_keys", ["client_id"])
     op.create_index("idx_api_keys_is_active", "api_keys", ["is_active"])
+    op.create_index("idx_api_keys_provider", "api_keys", ["provider"])
 
     # Users - busca por email (unique)
     op.create_index("idx_users_email", "users", ["email"], unique=True)
+    op.create_index("idx_users_client_id", "users", ["client_id"])
 
 
 def downgrade() -> None:
@@ -44,9 +46,11 @@ def downgrade() -> None:
     op.drop_index("idx_agents_name")
     op.drop_index("idx_agents_client_id")
     op.drop_index("idx_agents_type")
+    op.drop_index("idx_agents_folder_id")
     op.drop_index("idx_sessions_user_id")
-    op.drop_index("idx_sessions_agent_id")
-    op.drop_index("idx_sessions_created_at")
-    op.drop_index("idx_api_keys_key_hash")
+    op.drop_index("idx_sessions_app_name")
+    op.drop_index("idx_api_keys_client_id")
     op.drop_index("idx_api_keys_is_active")
+    op.drop_index("idx_api_keys_provider")
     op.drop_index("idx_users_email")
+    op.drop_index("idx_users_client_id")
