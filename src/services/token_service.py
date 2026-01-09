@@ -7,7 +7,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from sqlalchemy.orm import Session
-from src.models.models import RefreshToken
+from src.models.models import RefreshToken, User
 from src.services.auth_service import create_access_token
 import logging
 
@@ -36,9 +36,7 @@ class TokenService:
             Tupla (access_token, refresh_token)
         """
         # Buscar usuário do banco
-        from src.services.user_service import get_user_by_id
-
-        user = get_user_by_id(db, user_id)
+        user = db.query(User).filter(User.id == user_id).first()
         if not user:
             raise ValueError(f"User {user_id} not found")
 
@@ -92,9 +90,7 @@ class TokenService:
             return None
 
         # Buscar usuário
-        from src.services.user_service import get_user_by_id
-
-        user = get_user_by_id(db, str(db_token.user_id))
+        user = db.query(User).filter(User.id == db_token.user_id).first()
         if not user:
             logger.warning(f"User not found for refresh token")
             return None
