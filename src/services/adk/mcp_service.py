@@ -97,15 +97,19 @@ class MCPService:
 
                 # Use custom transport for CustomHomeMCP
                 exit_stack = AsyncExitStack()
-                client_context = custom_home_mcp_client(
-                    url=server_config["url"],
-                    headers=server_config.get("headers", {}),
-                    # Tools discovery should be fast, but give some room for many tools
-                    timeout=300,
-                )
-                transports = await exit_stack.enter_async_context(client_context)
-                session = await exit_stack.enter_async_context(ClientSession(*transports))
-                await session.initialize()
+                try:
+                    client_context = custom_home_mcp_client(
+                        url=server_config["url"],
+                        headers=server_config.get("headers", {}),
+                        # Tools discovery should be fast, but give some room for many tools
+                        timeout=300,
+                    )
+                    transports = await exit_stack.enter_async_context(client_context)
+                    session = await exit_stack.enter_async_context(ClientSession(*transports))
+                    await session.initialize()
+                except Exception as e:
+                    logger.warning(f"Failed to connect to custom MCP server: {e}")
+                    return [], None
 
                 # List tools from the session with pagination
                 all_mcp_tools = []
