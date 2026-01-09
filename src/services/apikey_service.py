@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: apikey_service.py                                                     │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from src.models.models import ApiKey
 from src.utils.crypto import encrypt_api_key, decrypt_api_key
 from sqlalchemy.orm import Session
@@ -59,7 +30,7 @@ def create_api_key(
         # Save in the database
         db.add(api_key)
         db.commit()
-        db.refresh(api_key)
+        db.refresh(api_key)        
         logger.info(f"API key '{name}' created for client {client_id}")
         return api_key
     except SQLAlchemyError as e:
@@ -74,7 +45,11 @@ def create_api_key(
 def get_api_key(db: Session, key_id: uuid.UUID) -> Optional[ApiKey]:
     """Get an API key by ID"""
     try:
-        return db.query(ApiKey).filter(ApiKey.id == key_id).first()
+        key = db.query(ApiKey).filter(ApiKey.id == key_id).first()
+        if key:
+            # Add masked key value for display
+            key.key_value_masked = "*****"
+        return key
     except SQLAlchemyError as e:
         logger.error(f"Error getting API key {key_id}: {str(e)}")
         raise HTTPException(
@@ -116,7 +91,13 @@ def get_api_keys_by_client(
             else:
                 query = query.order_by(ApiKey.created_at)
 
-        return query.offset(skip).limit(limit).all()
+        keys = query.offset(skip).limit(limit).all()
+        
+        # Add masked key value for display to all keys
+        for key in keys:
+            key.key_value_masked = "*****"
+            
+        return keys
     except SQLAlchemyError as e:
         logger.error(f"Error listing API keys for client {client_id}: {str(e)}")
         raise HTTPException(
@@ -163,6 +144,10 @@ def update_api_key(
 
         db.commit()
         db.refresh(key)
+        
+        # Add masked key value for display
+        key.key_value_masked = "*****"
+        
         logger.info(f"API key {key_id} updated")
         return key
     except SQLAlchemyError as e:

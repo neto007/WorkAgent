@@ -335,7 +335,7 @@ Key settings include:
 
 ```bash
 # Database settings
-POSTGRES_CONNECTION_STRING="postgresql://postgres:root@localhost:5432/evo_ai"
+POSTGRES_CONNECTION_STRING="postgresql://postgres:root@localhost:5433/evo_ai"
 
 # Redis settings
 REDIS_HOST="localhost"

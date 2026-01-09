@@ -1,0 +1,3 @@
+INFO:     Will watch for changes in these directories: ['/home/machine/repository/evo-ai']
+INFO:     Loading environment from '.env'
+ERROR:    [Errno 98] Address already in use

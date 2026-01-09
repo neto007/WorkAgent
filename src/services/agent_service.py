@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: agent_service.py                                                      │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException, status
@@ -271,13 +242,22 @@ async def create_agent(db: Session, agent: AgentCreate) -> Agent:
             config = {}
             agent.config = config
 
-        # Generate automatic API key if not provided or empty
-        if not config.get("api_key") or config.get("api_key") == "":
-            logger.info("Generating automatic API key for new agent")
-            config["api_key"] = generate_api_key()
-
         processed_config = {}
-        processed_config["api_key"] = config.get("api_key", "")
+        
+        # FIX: Respect api_key_id field when provided by frontend
+        # Only generate random UUID for legacy flows (workflow/task without api_key_id)
+        if agent.api_key_id:
+            # Modern flow: use the api_key_id reference provided by frontend
+            logger.info(f"Using api_key_id reference: {agent.api_key_id}")
+            # Store in config for backwards compatibility
+            processed_config["api_key"] = str(agent.api_key_id)
+        else:
+            # Legacy flow: use config['api_key'] or generate new UUID
+            if not config.get("api_key") or config.get("api_key") == "":
+                logger.info("Generating automatic API key for agent (legacy flow)")
+                config["api_key"] = generate_api_key()
+            
+            processed_config["api_key"] = config.get("api_key", "")
 
         if "tools" in config:
             processed_config["tools"] = config["tools"]
@@ -463,7 +443,10 @@ async def update_agent(
                 )
 
         # Continue with the original code
-        if "type" in agent_data and agent_data["type"] == "a2a":
+        if "type" in agent_data and agent_data["type"] == "a2a" and (
+            agent.type != "a2a" or 
+            ("agent_card_url" in agent_data and agent_data["agent_card_url"] != agent.agent_card_url)
+        ):
             if "agent_card_url" not in agent_data or not agent_data["agent_card_url"]:
                 raise HTTPException(
                     status_code=400,
@@ -508,7 +491,7 @@ async def update_agent(
                     detail=f"Failed to process agent card: {str(e)}",
                 )
 
-        elif "agent_card_url" in agent_data and agent.type == "a2a":
+        elif "agent_card_url" in agent_data and agent.type == "a2a" and agent_data["agent_card_url"] != agent.agent_card_url:
             if not agent_data["agent_card_url"]:
                 raise HTTPException(
                     status_code=400,
@@ -736,6 +719,9 @@ async def update_agent(
         db.commit()
         db.refresh(agent)
         return agent
+    except HTTPException:
+        db.rollback()
+        raise
     except Exception as e:
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Error updating agent: {str(e)}")

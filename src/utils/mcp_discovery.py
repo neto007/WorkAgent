@@ -29,10 +29,15 @@
 from typing import List, Dict, Any
 import asyncio
 
-async def _discover_async(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
+from src.config.settings import settings
+
+async def discover_mcp_tools_async(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Return a list[dict] with the tool metadata advertised by the MCP server."""
 
-    from src.services.mcp_service import MCPService
+    if settings.AI_ENGINE == "crewai":
+        from src.services.crewai.mcp_service import MCPService
+    else:
+        from src.services.adk.mcp_service import MCPService
 
     service = MCPService()
     tools, exit_stack = await service._connect_to_mcp_server(config_json)
@@ -52,4 +57,4 @@ async def _discover_async(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
 
 def discover_mcp_tools(config_json: Dict[str, Any]) -> List[Dict[str, Any]]:
     """Sync wrapper so we can call it from a sync service function."""
-    return asyncio.run(_discover_async(config_json))
+    return asyncio.run(discover_mcp_tools_async(config_json))

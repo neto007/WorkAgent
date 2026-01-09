@@ -1,0 +1,48 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Disable distributed DDL -->
+    <distributed_ddl remove="1"/>
+    
+    <!-- Use simple MergeTree instead of Replicated -->
+    <merge_tree>
+        <max_suspicious_broken_parts>5</max_suspicious_broken_parts>
+    </merge_tree>
+    
+    <!-- Network settings -->
+    <listen_host>0.0.0.0</listen_host>
+    
+    <!-- Users configuration -->
+    <users>
+        <clickhouse>
+            <password>clickhouse</password>
+            <networks>
+                <ip>::/0</ip>
+            </networks>
+            <profile>default</profile>
+            <quota>default</quota>
+        </clickhouse>
+    </users>
+    
+    <!-- Profiles -->
+    <profiles>
+        <default>
+            <max_memory_usage>10000000000</max_memory_usage>
+            <use_uncompressed_cache>0</use_uncompressed_cache>
+            <load_balancing>random</load_balancing>
+        </default>
+    </profiles>
+    
+    <!-- Quotas -->
+    <quotas>
+        <default>
+            <interval>
+                <duration>3600</duration>
+                <queries>0</queries>
+                <errors>0</errors>
+                <result_rows>0</result_rows>
+                <read_rows>0</read_rows>
+                <execution_time>0</execution_time>
+            </interval>
+        </default>
+    </quotas>
+</clickhouse>

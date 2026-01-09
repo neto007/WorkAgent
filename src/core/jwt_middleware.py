@@ -1,33 +1,4 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: jwt_middleware.py                                                     │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
-from fastapi import HTTPException, Depends, status
+from fastapi import HTTPException, Depends, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from src.config.settings import settings
@@ -40,15 +11,27 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
-async def get_jwt_token(token: str = Depends(oauth2_scheme)) -> dict:
+# Role hierarchy definition
+ROLE_HIERARCHY = {
+    "owner": 4,
+    "admin": 3,
+    "editor": 2,
+    "viewer": 1
+}
+
+async def get_jwt_token(
+    request: Request,
+    token: str = Depends(oauth2_scheme)
+) -> dict:
     """
-    Extracts and validates the JWT token
+    Extracts and validates the JWT token from header or cookie
 
     Args:
-        token: Token JWT
+        request: FastAPI request object
+        token: Token JWT from Authorization header
 
     Returns:
         dict: Token payload data
@@ -61,6 +44,21 @@ async def get_jwt_token(token: str = Depends(oauth2_scheme)) -> dict:
         detail="Invalid credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
+
+    # If header auth failed or was missing, check cookie (same as get_current_user)
+    if not token:
+        token = request.cookies.get("access_token")
+        if token:
+            pass # logger.info(f"Token found in cookie for JWT middleware: {token[:10]}...")
+        else:
+            logger.warning("No token found in header or cookie (jwt_middleware)")
+
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="No token found in header or cookie",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     try:
         payload = jwt.decode(
@@ -135,10 +133,53 @@ async def verify_user_client(
     return True
 
 
+async def verify_role(
+    required_role: str,
+    payload: dict
+) -> bool:
+    """
+    Verifies if the user has at least the required role severity.
+    
+    Args:
+        required_role: The minimum role required (viewer, editor, admin, owner)
+        payload: The JWT payload containing the user's role
+        
+    Returns:
+        bool: True if authorized
+        
+    Raises:
+        HTTPException: If role is insufficient
+    """
+    # System admins bypass role checks
+    if payload.get("is_admin", False):
+        return True
+
+    user_role = payload.get("role", "viewer") # Default to viewer if missing
+    
+    required_level = ROLE_HIERARCHY.get(required_role, 0)
+    user_level = ROLE_HIERARCHY.get(user_role, 0)
+    
+    if user_level < required_level:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Insufficient permissions. Required role: {required_role}"
+        )
+        
+    return True
+
+
+async def verify_user_access(
+    payload: dict = Depends(get_jwt_token),
+    required_role: str = "viewer"
+) -> bool:
+    """Dependency wrapper for verify_role"""
+    return await verify_role(required_role, payload)
+
+
 async def verify_admin(payload: dict = Depends(get_jwt_token)) -> bool:
     """
     Verifies if the user is an administrator
-
+    
     Args:
         payload: Token JWT payload
 

@@ -1,33 +1,6 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: agent_builder.py                                                      │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from typing import List, Optional, Tuple
+import litellm
+import sys
 from google.adk.agents.llm_agent import LlmAgent
 from google.adk.agents import SequentialAgent, ParallelAgent, LoopAgent, BaseAgent
 from google.adk.models.lite_llm import LiteLlm
@@ -105,7 +78,8 @@ class AgentBuilder:
         current_time = now.strftime("%H:%M")
 
         # Substitute variables in the prompt
-        formatted_prompt = agent.instruction.format(
+        instruction = agent.instruction or ""
+        formatted_prompt = instruction.format(
             current_datetime=current_datetime,
             current_day_of_week=current_day_of_week,
             current_date_iso=current_date_iso,
@@ -139,7 +113,7 @@ class AgentBuilder:
         if hasattr(agent, "api_key_id") and agent.api_key_id:
             decrypted_key = get_decrypted_api_key(self.db, agent.api_key_id)
             if decrypted_key:
-                logger.info(f"Using stored API key for agent {agent.name}")
+                logger.debug(f"Using stored API key for agent {agent.name}")
                 api_key = decrypted_key
             else:
                 logger.error(f"Stored API key not found for agent {agent.name}")
@@ -150,19 +124,27 @@ class AgentBuilder:
             # Check if there is an API key in the config (temporary field)
             config_api_key = agent.config.get("api_key") if agent.config else None
             if config_api_key:
-                logger.info(f"Using config API key for agent {agent.name}")
+                logger.debug(f"Using config API key for agent {agent.name}")
+                # Check if it is a UUID of a stored key
                 # Check if it is a UUID of a stored key
                 try:
                     key_id = uuid.UUID(config_api_key)
+                    is_valid_uuid = True
+                except (ValueError, TypeError):
+                    is_valid_uuid = False
+                
+                if is_valid_uuid:
+                    # It IS a UUID, so it MUST exist in DB
                     decrypted_key = get_decrypted_api_key(self.db, key_id)
                     if decrypted_key:
-                        logger.info("Config API key is a valid reference")
+                        logger.debug("Config API key is a valid reference")
                         api_key = decrypted_key
                     else:
-                        # Use the key directly
-                        api_key = config_api_key
-                except (ValueError, TypeError):
-                    # It is not a UUID, use directly
+                        # Valid UUID but not found -> ERROR
+                        logger.error(f"API key reference {config_api_key} not found in database for agent {agent.name}")
+                        raise ValueError(f"A chave de API configurada para o agente {agent.name} não foi encontrada ou está inativa.")
+                else:
+                    # It is NOT a UUID, use directly as a raw key
                     api_key = config_api_key
             else:
                 logger.error(f"No API key configured for agent {agent.name}")
@@ -170,6 +152,17 @@ class AgentBuilder:
                     f"Agent {agent.name} does not have a configured API key"
                 )
 
+        # DEBUG: Log agent creation params
+        if api_key:
+            masked_key = f"{str(api_key)[:7]}..."
+        else:
+            masked_key = "None"
+            
+        logger.info(f"Creating LiteLlm for agent {agent.name} | Model: {agent.model} | Key: {masked_key}")
+        
+        # Activate logs
+        litellm.set_verbose = True
+        
         return (
             LlmAgent(
                 name=agent.name,
@@ -195,7 +188,7 @@ class AgentBuilder:
                 logger.error(f"Sub-agent not found: {sub_agent_id_str}")
                 raise AgentNotFoundError(f"Agent with ID {sub_agent_id_str} not found")
 
-            logger.info(f"Sub-agent found: {agent.name} (type: {agent.type})")
+            logger.debug(f"Sub-agent found: {agent.name} (type: {agent.type})")
 
             if agent.type == "llm":
                 sub_agent, exit_stack = await self._create_llm_agent(agent)
@@ -215,10 +208,10 @@ class AgentBuilder:
                 raise ValueError(f"Invalid agent type: {agent.type}")
 
             sub_agents.append((sub_agent, exit_stack))
-            logger.info(f"Sub-agent added: {agent.name}")
+            logger.debug(f"Sub-agent added: {agent.name}")
 
-        logger.info(f"Sub-agents created: {len(sub_agents)}")
-        logger.info(f"Sub-agents: {str(sub_agents)}")
+        logger.debug(f"Sub-agents created: {len(sub_agents)}")
+        logger.debug(f"Sub-agents: {str(sub_agents)}")
 
         return sub_agents
 
@@ -226,7 +219,7 @@ class AgentBuilder:
         self, root_agent, enabled_tools: List[str] = []
     ) -> Tuple[LlmAgent, Optional[AsyncExitStack]]:
         """Build an LLM agent with its sub-agents."""
-        logger.info("Creating LLM agent")
+        logger.debug("Creating LLM agent")
 
         sub_agents = []
         if root_agent.config.get("sub_agents"):
@@ -247,7 +240,7 @@ class AgentBuilder:
         self, root_agent
     ) -> Tuple[BaseAgent, Optional[AsyncExitStack]]:
         """Build an A2A agent with its sub-agents."""
-        logger.info(f"Creating A2A agent from {root_agent.agent_card_url}")
+        logger.debug(f"Creating A2A agent from {root_agent.agent_card_url}")
 
         if not root_agent.agent_card_url:
             raise ValueError("agent_card_url is required for a2a agents")
@@ -272,7 +265,7 @@ class AgentBuilder:
                 sub_agents=sub_agents,
             )
 
-            logger.info(
+            logger.debug(
                 f"A2A agent created successfully: {root_agent.name} ({root_agent.agent_card_url})"
             )
 
@@ -286,7 +279,7 @@ class AgentBuilder:
         self, root_agent
     ) -> Tuple[WorkflowAgent, Optional[AsyncExitStack]]:
         """Build a workflow agent with its sub-agents."""
-        logger.info(f"Creating Workflow agent from {root_agent.name}")
+        logger.debug(f"Creating Workflow agent from {root_agent.name}")
 
         agent_config = root_agent.config or {}
 
@@ -314,7 +307,7 @@ class AgentBuilder:
                 db=self.db,
             )
 
-            logger.info(f"Workflow agent created successfully: {root_agent.name}")
+            logger.debug(f"Workflow agent created successfully: {root_agent.name}")
 
             return workflow_agent, None
 
@@ -326,7 +319,7 @@ class AgentBuilder:
         self, root_agent
     ) -> Tuple[TaskAgent, Optional[AsyncExitStack]]:
         """Build a task agent with its sub-agents."""
-        logger.info(f"Creating Task agent: {root_agent.name}")
+        logger.debug(f"Creating Task agent: {root_agent.name}")
 
         agent_config = root_agent.config or {}
 
@@ -364,7 +357,7 @@ class AgentBuilder:
                 sub_agents=sub_agents,
             )
 
-            logger.info(f"Task agent created successfully: {root_agent.name}")
+            logger.debug(f"Task agent created successfully: {root_agent.name}")
 
             return task_agent, None
 
@@ -376,7 +369,7 @@ class AgentBuilder:
         self, root_agent
     ) -> Tuple[SequentialAgent | ParallelAgent | LoopAgent, Optional[AsyncExitStack]]:
         """Build a composite agent (Sequential, Parallel or Loop) with its sub-agents."""
-        logger.info(
+        logger.debug(
             f"Processing sub-agents for agent {root_agent.type} (ID: {root_agent.id}, Name: {root_agent.name})"
         )
 
@@ -386,7 +379,7 @@ class AgentBuilder:
             )
             raise ValueError(f"Missing sub_agents configuration for {root_agent.name}")
 
-        logger.info(
+        logger.debug(
             f"Sub-agents IDs to be processed: {root_agent.config.get('sub_agents', [])}"
         )
 
@@ -394,12 +387,12 @@ class AgentBuilder:
             root_agent.config.get("sub_agents", [])
         )
 
-        logger.info(
+        logger.debug(
             f"Sub-agents processed: {len(sub_agents_with_stacks)} of {len(root_agent.config.get('sub_agents', []))}"
         )
 
         sub_agents = [agent for agent, _ in sub_agents_with_stacks]
-        logger.info(f"Extracted sub-agents: {[agent.name for agent in sub_agents]}")
+        logger.debug(f"Extracted sub-agents: {[agent.name for agent in sub_agents]}")
 
         # Combine all exit stacks from sub-agents
         combined_exit_stack = AsyncExitStack()
@@ -408,7 +401,7 @@ class AgentBuilder:
                 await combined_exit_stack.enter_async_context(exit_stack)
 
         if root_agent.type == "sequential":
-            logger.info(f"Creating SequentialAgent with {len(sub_agents)} sub-agents")
+            logger.debug(f"Creating SequentialAgent with {len(sub_agents)} sub-agents")
             return (
                 SequentialAgent(
                     name=root_agent.name,
@@ -418,7 +411,7 @@ class AgentBuilder:
                 combined_exit_stack,
             )
         elif root_agent.type == "parallel":
-            logger.info(f"Creating ParallelAgent with {len(sub_agents)} sub-agents")
+            logger.debug(f"Creating ParallelAgent with {len(sub_agents)} sub-agents")
             return (
                 ParallelAgent(
                     name=root_agent.name,
@@ -428,7 +421,7 @@ class AgentBuilder:
                 combined_exit_stack,
             )
         elif root_agent.type == "loop":
-            logger.info(f"Creating LoopAgent with {len(sub_agents)} sub-agents")
+            logger.debug(f"Creating LoopAgent with {len(sub_agents)} sub-agents")
             return (
                 LoopAgent(
                     name=root_agent.name,

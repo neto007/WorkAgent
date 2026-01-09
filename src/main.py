@@ -1,34 +1,6 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: main.py                                                               │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 import os
 import sys
+import warnings
 from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -37,6 +9,10 @@ from src.config.database import engine, Base
 from src.config.settings import settings
 from src.utils.logger import setup_logger
 from src.utils.otel import init_otel
+from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+# Suppress WebSocket deprecation warning
+warnings.filterwarnings("ignore", message="remove second argument of ws_handler", category=DeprecationWarning)
 
 # Necessary for other modules
 from src.services.service_providers import session_service  # noqa: F401
@@ -52,6 +28,8 @@ import src.api.mcp_server_routes
 import src.api.tool_routes
 import src.api.client_routes
 import src.api.a2a_routes
+import src.api.upload_routes
+import src.api.client_users_routes
 
 # Add the root directory to PYTHONPATH
 root_dir = Path(__file__).parent.parent
@@ -71,7 +49,7 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins in development
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -85,7 +63,7 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 # PostgreSQL configuration
 POSTGRES_CONNECTION_STRING = os.getenv(
-    "POSTGRES_CONNECTION_STRING", "postgresql://postgres:root@localhost:5432/evo_ai"
+    "POSTGRES_CONNECTION_STRING", "postgresql://postgres:root@localhost:5433/evo_ai"
 )
 
 # Create database tables
@@ -103,6 +81,8 @@ mcp_server_router = src.api.mcp_server_routes.router
 tool_router = src.api.tool_routes.router
 client_router = src.api.client_routes.router
 a2a_router = src.api.a2a_routes.router
+upload_router = src.api.upload_routes.router
+client_users_router = src.api.client_users_routes.router
 
 # Include routes
 app.include_router(auth_router, prefix=API_PREFIX)
@@ -114,9 +94,14 @@ app.include_router(chat_router, prefix=API_PREFIX)
 app.include_router(session_router, prefix=API_PREFIX)
 app.include_router(agent_router, prefix=API_PREFIX)
 app.include_router(a2a_router, prefix=API_PREFIX)
+app.include_router(upload_router, prefix=API_PREFIX)
+app.include_router(client_users_router, prefix=API_PREFIX)
 
 # Inicializa o OpenTelemetry para Langfuse
 init_otel()
+
+# Instrumenta o FastAPI automaticamente para tracing
+FastAPIInstrumentor.instrument_app(app)
 
 
 @app.get("/")

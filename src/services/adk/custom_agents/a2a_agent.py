@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: a2a_agent.py                                                          │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
 from google.adk.events import Event
@@ -67,7 +38,7 @@ class A2ACustomAgent(BaseAgent):
         self,
         name: str,
         agent_card_url: str,
-        timeout: int = 300,
+        timeout: int = 3600,
         api_key: Optional[str] = None,
         preferred_implementation: A2AImplementation = A2AImplementation.AUTO,
         sub_agents: List[BaseAgent] = [],
@@ -172,23 +143,38 @@ class A2ACustomAgent(BaseAgent):
             if "/api/v1/a2a/" in url:
                 # Custom implementation URL
                 parts = url.split("/api/v1/a2a/")[1]
-                return parts.split("/")[0]
+                agent_id = parts.split("/")[0]
+                # Remove .well-known/agent.json if present
+                agent_id = agent_id.replace("/.well-known/agent.json", "")
+                return agent_id
             elif "/api/v1/a2a-sdk/" in url:
                 # SDK implementation URL
                 parts = url.split("/api/v1/a2a-sdk/")[1]
-                return parts.split("/")[0]
+                agent_id = parts.split("/")[0]
+                # Remove .well-known/agent.json if present
+                agent_id = agent_id.replace("/.well-known/agent.json", "")
+                return agent_id
+            elif "/.well-known/agent" in url:
+                # Direct agent card URL like http://ip:port/.well-known/agent.json
+                # Extract from base_url which should have been set correctly
+                # Use a default agent name
+                return "default-agent"
             else:
                 # Try to extract from path
                 path_parts = url.split("/")
                 for i, part in enumerate(path_parts):
                     if part in ["a2a", "a2a-sdk"] and i + 1 < len(path_parts):
-                        return path_parts[i + 1]
+                        agent_id = path_parts[i + 1]
+                        # Remove .well-known/agent.json if present
+                        agent_id = agent_id.replace(".well-known", "").replace("agent.json", "").strip("/")
+                        if agent_id:
+                            return agent_id
 
                 # Fallback: use last meaningful part
                 meaningful_parts = [
                     p
                     for p in path_parts
-                    if p and p != ".well-known" and p != "agent.json"
+                    if p and p != ".well-known" and p != "agent.json" and not p.startswith("http")
                 ]
                 return meaningful_parts[-1] if meaningful_parts else "unknown-agent"
 
@@ -258,14 +244,16 @@ class A2ACustomAgent(BaseAgent):
 
                 if supports_streaming:
                     print("Agent supports streaming, using streaming API")
-                    await self._process_streaming_response(
+                    async for event in self._process_streaming_response(
                         client, agent_id, user_message, session_id
-                    )
+                    ):
+                        yield event
                 else:
                     print("Agent does not support streaming, using regular API")
-                    await self._process_regular_response(
+                    async for event in self._process_regular_response(
                         client, agent_id, user_message, session_id
-                    )
+                    ):
+                        yield event
 
             # 5. Run sub-agents
             for sub_agent in self.sub_agents:

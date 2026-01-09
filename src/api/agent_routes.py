@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: agent_routes.py                                                       │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from fastapi import (
     APIRouter,
     Depends,
@@ -44,7 +15,9 @@ from typing import List, Dict, Any, Optional, Union
 import uuid
 from src.core.jwt_middleware import (
     get_jwt_token,
+    get_jwt_token,
     verify_user_client,
+    verify_role,
 )
 from src.schemas.schemas import (
     Agent,
@@ -115,6 +88,7 @@ async def create_api_key(
     payload: dict = Depends(get_jwt_token),
 ):
     """Create a new API key"""
+    await verify_role("editor", payload)
     await verify_user_client(payload, db, key.client_id)
 
     db_key = apikey_service.create_api_key(
@@ -173,6 +147,41 @@ async def read_api_key(
     return key
 
 
+@router.get("/apikeys/{key_id}/value")
+async def get_api_key_value(
+    key_id: uuid.UUID,
+    x_client_id: uuid.UUID = Header(..., alias="x-client-id"),
+    db: Session = Depends(get_db),
+    payload: dict = Depends(get_jwt_token),
+):
+    """Get the decrypted value of a specific API key"""
+    # Verify if the user has access to this client's data
+    await verify_user_client(payload, db, x_client_id)
+
+    key = apikey_service.get_api_key(db, key_id)
+    if not key:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="API Key not found"
+        )
+
+    # Verify if the key belongs to the specified client
+    if key.client_id != x_client_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="API Key does not belong to the specified client",
+        )
+
+    # Get the decrypted value
+    decrypted_value = apikey_service.get_decrypted_api_key(db, key_id)
+    if decrypted_value is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to decrypt API key"
+        )
+
+    return {"key_value": decrypted_value}
+
+
 @router.put("/apikeys/{key_id}", response_model=ApiKey)
 async def update_api_key(
     key_id: uuid.UUID,
@@ -182,6 +191,7 @@ async def update_api_key(
     payload: dict = Depends(get_jwt_token),
 ):
     """Update an API key"""
+    await verify_role("editor", payload)
     # Verify if the user has access to this client's data
     await verify_user_client(payload, db, x_client_id)
 
@@ -219,6 +229,7 @@ async def delete_api_key(
     payload: dict = Depends(get_jwt_token),
 ):
     """Deactivate an API key (soft delete)"""
+    await verify_role("editor", payload)
     # Verify if the user has access to this client's data
     await verify_user_client(payload, db, x_client_id)
 
@@ -312,6 +323,7 @@ async def update_folder(
     payload: dict = Depends(get_jwt_token),
 ):
     """Update an agent folder"""
+    await verify_role("editor", payload)
     # Verify if the user has access to this client's data
     await verify_user_client(payload, db, x_client_id)
 
@@ -489,6 +501,7 @@ async def create_agent(
     payload: dict = Depends(get_jwt_token),
 ):
     try:
+        await verify_role("editor", payload)
         # Verify if the user has access to the agent's client
         await verify_user_client(payload, db, agent.client_id)
 
@@ -542,6 +555,7 @@ async def update_agent(
     payload: dict = Depends(get_jwt_token),
 ):
     try:
+        await verify_role("editor", payload)
         # Get the current agent
         db_agent = agent_service.get_agent(db, agent_id)
         if db_agent is None:
@@ -577,12 +591,70 @@ async def update_agent(
         )
 
 
+@router.put("/{agent_id}/workflow", response_model=Agent)
+async def update_agent_workflow(
+    agent_id: uuid.UUID,
+    workflow_data: Dict[str, Any],
+    db: Session = Depends(get_db),
+    payload: dict = Depends(get_jwt_token),
+):
+    """Update agent workflow configuration"""
+    try:
+        await verify_role("editor", payload)
+        # Get the current agent
+        db_agent = agent_service.get_agent(db, agent_id)
+        if db_agent is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Agent not found"
+            )
+
+        # Verify if the user has access to the agent's client
+        await verify_user_client(payload, db, db_agent.client_id)
+
+        # Extract workflow from body
+        if "workflow" not in workflow_data:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="workflow field is required"
+            )
+
+        # Merge new workflow with existing config
+        current_config = db_agent.config or {}
+        if isinstance(current_config, dict):
+            new_config = {**current_config, "workflow": workflow_data["workflow"]}
+        else:
+            # Handle case where config might be Pydantic model (though service returns dict/model)
+            # Assuming it's behaving like a dict for update
+            new_config = {"workflow": workflow_data["workflow"]}
+
+        # Update the agent
+        updated_agent = await agent_service.update_agent(db, agent_id, {"config": new_config})
+        
+        if not updated_agent.agent_card_url:
+            updated_agent.agent_card_url = updated_agent.agent_card_url_property
+
+        return updated_agent
+    except ValueError as e:
+        logger.error(f"Validation error updating agent workflow {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error updating agent workflow {agent_id}: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update agent workflow: {str(e)}"
+        )
+
+
 @router.delete("/{agent_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_agent(
     agent_id: uuid.UUID,
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
+    await verify_role("editor", payload)
     # Get the agent
     db_agent = agent_service.get_agent(db, agent_id)
     if db_agent is None:

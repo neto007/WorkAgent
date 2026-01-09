@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evo-ai-redis
+  namespace: evo-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: evo-ai-redis
+  template:
+    metadata:
+      labels:
+        app: evo-ai-redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:alpine
+        command: ["redis-server", "--appendonly", "yes", "--requirepass", "$(REDIS_PASSWORD)"]
+        ports:
+        - containerPort: 6379
+        env:
+        - name: REDIS_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: evo-ai-secret
+              key: REDIS_PASSWORD
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        emptyDir: {} # For production, use PVC
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evo-ai-redis
+  namespace: evo-ai
+spec:
+  ports:
+  - port: 6379
+  selector:
+    app: evo-ai-redis

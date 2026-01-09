@@ -1,0 +1,52 @@
+
+> frontend-sec@0.0.0 dev
+> vite --debug hmr --force
+
+20:28:12 [vite] (client) Forced re-optimization of dependencies
+Port 3001 is in use, trying another one...
+Port 3002 is in use, trying another one...
+Port 3003 is in use, trying another one...
+
+  VITE v7.3.0  ready in 566 ms
+
+  ➜  Local:   http://localhost:3004/
+  ➜  Network: http://192.168.0.11:3004/
+  ➜  Network: http://25.46.203.61:3004/
+  ➜  Network: http://172.18.0.1:3004/
+  ➜  Network: http://172.22.0.1:3004/
+  ➜  Network: http://172.20.0.1:3004/
+  ➜  Network: http://172.21.0.1:3004/
+  ➜  press h + enter to show help
+2025-12-28T23:28:13.151Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:28:13.173Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:28:13.174Z vite:hmr (ssr) [no modules matched] frontend_logs.txt
+2025-12-28T23:31:19.821Z vite:hmr [file change] src/components/layout/Header.tsx
+2025-12-28T23:31:19.821Z vite:hmr (client) [no modules matched] src/components/layout/Header.tsx
+2025-12-28T23:31:19.822Z vite:hmr (ssr) [no modules matched] src/components/layout/Header.tsx
+2025-12-28T23:31:19.824Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:31:19.824Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:31:19.824Z vite:hmr (ssr) [no modules matched] frontend_logs.txt
+2025-12-28T23:34:13.754Z vite:hmr [file change] src/pages/MCPServersPage.tsx
+2025-12-28T23:34:13.755Z vite:hmr (client) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:34:13.755Z vite:hmr (ssr) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:34:13.759Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:34:13.760Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:34:13.760Z vite:hmr (ssr) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:00.463Z vite:hmr [file change] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:00.464Z vite:hmr (client) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:00.464Z vite:hmr (ssr) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:00.465Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:35:00.465Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:00.465Z vite:hmr (ssr) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:14.245Z vite:hmr [file change] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:14.245Z vite:hmr (client) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:14.245Z vite:hmr (ssr) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:14.251Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:35:14.253Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:14.253Z vite:hmr (ssr) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:30.785Z vite:hmr [file change] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:30.785Z vite:hmr (client) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:30.785Z vite:hmr (ssr) [no modules matched] src/pages/MCPServersPage.tsx
+2025-12-28T23:35:30.787Z vite:hmr [file change] frontend_logs.txt
+2025-12-28T23:35:30.787Z vite:hmr (client) [no modules matched] frontend_logs.txt
+2025-12-28T23:35:30.787Z vite:hmr (ssr) [no modules matched] frontend_logs.txt

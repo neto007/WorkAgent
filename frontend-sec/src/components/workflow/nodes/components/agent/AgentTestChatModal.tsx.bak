@@ -1,0 +1,350 @@
+import { useState, useCallback, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { useAgentWebSocket } from "@/hooks/use-agent-webSocket";
+import { getAccessTokenFromCookie } from "@/lib/utils";
+import type { Agent } from "@/types/agent";
+import { ChatInput } from "@/app/chat/components/ChatInput";
+import { ChatMessage as ChatMessageComponent } from "@/app/chat/components/ChatMessage";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import type { ChatPart } from "@/services/sessionService";
+import type { FileData } from "@/lib/file-utils";
+import { X, User, Bot, Zap, MessageSquare, RefreshCw, Code, ExternalLink, Workflow } from "lucide-react";
+
+interface ChatMessage {
+    id: string;
+    content: any;
+    author: string;
+    timestamp: number;
+}
+
+interface AgentTestChatModalProps {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    agent: Agent;
+}
+
+export function AgentTestChatModal({ open, onOpenChange, agent }: AgentTestChatModalProps) {
+    const [messages, setMessages] = useState<ChatMessage[]>([]);
+    const [isSending, setIsSending] = useState(false);
+    const [expandedFunctions, setExpandedFunctions] = useState<Record<string, boolean>>({});
+    const [isInitializing, setIsInitializing] = useState(true);
+    const messagesContainerRef = useRef<HTMLDivElement>(null);
+
+    const user = typeof window !== "undefined" ? JSON.parse(localStorage.getItem("user") || "{}") : {};
+    const clientId = user?.client_id || "test";
+
+    const generateExternalId = () => {
+        const now = new Date();
+        return (
+            now.getFullYear().toString() +
+            (now.getMonth() + 1).toString().padStart(2, "0") +
+            now.getDate().toString().padStart(2, "0") +
+            now.getHours().toString().padStart(2, "0") +
+            now.getMinutes().toString().padStart(2, "0") +
+            now.getSeconds().toString().padStart(2, "0") +
+            now.getMilliseconds().toString().padStart(3, "0")
+        );
+    };
+
+    const [externalId, setExternalId] = useState(generateExternalId());
+    const jwt = getAccessTokenFromCookie();
+
+    const onEvent = useCallback((event: any) => {
+        setMessages((prev) => [...prev, event]);
+    }, []);
+
+    const onTurnComplete = useCallback(() => {
+        setIsSending(false);
+    }, []);
+
+    const { sendMessage: wsSendMessage, disconnect } = useAgentWebSocket({
+        agentId: agent.id,
+        externalId,
+        jwt,
+        onEvent,
+        onTurnComplete,
+    });
+
+    // Handle ESC key
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape" && open) {
+                onOpenChange(false);
+            }
+        };
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    }, [onOpenChange, open]);
+
+    // Initialization
+    useEffect(() => {
+        if (open) {
+            setIsInitializing(true);
+            const timer = setTimeout(() => {
+                setIsInitializing(false);
+            }, 1200);
+            return () => clearTimeout(timer);
+        }
+    }, [open, externalId]);
+
+    const handleRestartChat = () => {
+        if (disconnect) disconnect();
+        setMessages([]);
+        setExpandedFunctions({});
+        setExternalId(generateExternalId());
+        setIsInitializing(true);
+        setTimeout(() => {
+            setIsInitializing(false);
+        }, 1200);
+    };
+
+    const handleSendMessageWithFiles = (message: string, files?: FileData[]) => {
+        if (!message.trim() && (!files || files.length === 0)) return;
+        setIsSending(true);
+
+        const messageParts: ChatPart[] = [];
+
+        if (message.trim()) {
+            messageParts.push({ text: message });
+        }
+
+        if (files && files.length > 0) {
+            files.forEach((file) => {
+                messageParts.push({
+                    inline_data: {
+                        data: file.data,
+                        mime_type: file.content_type,
+                        metadata: {
+                            filename: file.filename,
+                        },
+                    },
+                });
+            });
+        }
+
+        setMessages((prev) => [
+            ...prev,
+            {
+                id: `temp-${Date.now()}`,
+                content: {
+                    parts: messageParts,
+                    role: "user",
+                },
+                author: "user",
+                timestamp: Date.now() / 1000,
+            },
+        ]);
+
+        wsSendMessage(message, files);
+    };
+
+    const containsMarkdown = (text: string): boolean => {
+        if (!text || text.length < 3) return false;
+        const markdownPatterns = [
+            /[*_]{1,2}[^*_]+[*_]{1,2}/,
+            /\[[^\]]+\]\([^)]+\)/,
+            /^#{1,6}\s/m,
+            /^[-*+]\s/m,
+            /^[0-9]+\.\s/m,
+            /^>\s/m,
+            /`[^`]+`/,
+            /```[\s\S]*?```/,
+            /^\|(.+\|)+$/m,
+            /!\[[^\]]*\]\([^)]+\)/,
+        ];
+        return markdownPatterns.some((pattern) => pattern.test(text));
+    };
+
+    const getMessageText = (message: ChatMessage): any => {
+        const parts = message.content.parts;
+        if (!parts || parts.length === 0) return "Empty content";
+
+        const textParts = parts.filter((part: any) => part.text).map((part: any) => part.text);
+        if (textParts.length > 0) {
+            return {
+                author: message.author,
+                content: textParts.join("\n\n"),
+                title: "Message",
+            };
+        }
+
+        return "Unable to interpret message content";
+    };
+
+    const toggleFunctionExpansion = (messageId: string) => {
+        setExpandedFunctions((prev) => ({ ...prev, [messageId]: !prev[messageId] }));
+    };
+
+    const getAgentTypeIcon = (type: string) => {
+        switch (type) {
+            case "llm":
+                return <Code className="h-4 w-4 text-[#50fa7b]" />;
+            case "a2a":
+                return <ExternalLink className="h-4 w-4 text-[#8be9fd]" />;
+            case "sequential":
+            case "workflow":
+                return <Workflow className="h-4 w-4 text-[#bd93f9]" />;
+            default:
+                return <Bot className="h-4 w-4 text-[#bd93f9]" />;
+        }
+    };
+
+    // Auto scroll
+    useEffect(() => {
+        if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = messagesContainerRef.current.scrollHeight;
+        }
+    }, [messages]);
+
+    if (!open) return null;
+
+    const modalContent = (
+        <>
+            {/* Overlay */}
+            <div
+                className="fixed inset-0 bg-black/50 z-[999] transition-opacity"
+                onClick={() => onOpenChange(false)}
+            />
+
+            {/* Side panel */}
+            <div
+                className="fixed right-0 top-0 z-[1000] h-full w-[450px] bg-[#0b0b11] border-l-2 border-[#1a1b26] shadow-[0_0_50px_rgba(0,0,0,0.5)] flex flex-col"
+                style={{
+                    transform: open ? "translateX(0)" : "translateX(100%)",
+                    transition: "transform 300ms ease-in-out",
+                }}
+            >
+                {/* Header */}
+                <div className="flex-shrink-0 p-5 bg-gradient-to-r from-[#0b0b11] to-[#1a1b26] border-b-2 border-[#1a1b26]">
+                    <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                            <div className="flex items-center mb-1">
+                                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-[#bd93f9] to-[#bd93f9]/50 flex items-center justify-center shadow-[0_0_15px_rgba(189,147,249,0.3)] mr-3">
+                                    {getAgentTypeIcon(agent.type)}
+                                </div>
+                                <div>
+                                    <h2 className="text-lg font-black text-[#f8f8f2]">{agent.name}</h2>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <Badge className="bg-[#bd93f9]/20 text-[#bd93f9] border-[#bd93f9]/40 px-2 text-[10px] font-bold">
+                                            {agent.type.toUpperCase()}
+                                        </Badge>
+                                        {agent.model && (
+                                            <span className="text-[10px] text-[#6272a4] bg-[#1a1b26] px-2 py-0.5 rounded-md">
+                                                {agent.model}
+                                            </span>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                            <button
+                                onClick={handleRestartChat}
+                                className="p-1.5 rounded-full hover:bg-[#1a1b26] text-[#6272a4] hover:text-[#f8f8f2] transition-colors"
+                                title="Restart chat"
+                                disabled={isInitializing}
+                            >
+                                <RefreshCw size={18} className={isInitializing ? "animate-spin text-[#bd93f9]" : ""} />
+                            </button>
+                            <button
+                                onClick={() => onOpenChange(false)}
+                                className="p-1.5 rounded-full hover:bg-[#1a1b26] text-[#6272a4] hover:text-[#ff5555] transition-colors"
+                            >
+                                <X size={18} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {agent.description && (
+                        <div className="mt-3 text-xs text-[#6272a4] bg-[#1a1b26] p-3 rounded-lg border-2 border-[#282a36]">
+                            {agent.description}
+                        </div>
+                    )}
+                </div>
+
+                {/* Chat content */}
+                <div
+                    className="flex-1 overflow-y-auto overflow-x-hidden p-3 bg-[#0b0b11]"
+                    ref={messagesContainerRef}
+                >
+                    {isInitializing ? (
+                        <div className="flex flex-col items-center justify-center h-full">
+                            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-[#bd93f9] to-[#bd93f9]/50 flex items-center justify-center shadow-[0_0_20px_rgba(189,147,249,0.4)] mb-4 animate-pulse">
+                                <Zap className="h-5 w-5 text-[#0b0b11]" />
+                            </div>
+                            <p className="text-[#6272a4] mb-2 font-bold">Initializing connection...</p>
+                            <div className="flex items-center space-x-2">
+                                <span className="w-2 h-2 rounded-full bg-[#bd93f9] animate-bounce" style={{ animationDelay: "0ms" }} />
+                                <span className="w-2 h-2 rounded-full bg-[#bd93f9] animate-bounce" style={{ animationDelay: "150ms" }} />
+                                <span className="w-2 h-2 rounded-full bg-[#bd93f9] animate-bounce" style={{ animationDelay: "300ms" }} />
+                            </div>
+                        </div>
+                    ) : messages.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center h-full text-center px-6">
+                            <div className="w-14 h-14 rounded-full bg-[#bd93f9]/10 flex items-center justify-center shadow-[0_0_15px_rgba(189,147,249,0.2)] mb-5 border-2 border-[#bd93f9]/30">
+                                <MessageSquare className="h-6 w-6 text-[#bd93f9]" />
+                            </div>
+                            <h3 className="text-lg font-black text-[#f8f8f2] mb-2">Start the conversation</h3>
+                            <p className="text-[#6272a4] text-sm max-w-xs">
+                                Type a message below to begin chatting with {agent.name}
+                            </p>
+                        </div>
+                    ) : (
+                        <div className="space-y-4 w-full max-w-full">
+                            {messages.map((message) => {
+                                const messageContent = getMessageText(message);
+                                const agentColor = message.author === "user" ? "bg-[#50fa7b]" : "bg-gradient-to-br from-[#1a1b26] to-[#282a36]";
+                                const isExpanded = expandedFunctions[message.id] || false;
+
+                                return (
+                                    <ChatMessageComponent
+                                        key={message.id}
+                                        message={message}
+                                        agentColor={agentColor}
+                                        isExpanded={isExpanded}
+                                        toggleExpansion={toggleFunctionExpansion}
+                                        containsMarkdown={containsMarkdown}
+                                        messageContent={messageContent}
+                                    />
+                                );
+                            })}
+
+                            {isSending && (
+                                <div className="flex justify-start">
+                                    <div className="flex gap-3 max-w-[80%]">
+                                        <Avatar className="bg-gradient-to-br from-[#bd93f9] to-[#bd93f9]/50 shadow-md border-0">
+                                            <AvatarFallback className="bg-transparent">
+                                                <Bot className="h-4 w-4 text-[#0b0b11]" />
+                                            </AvatarFallback>
+                                        </Avatar>
+                                        <div className="rounded-lg p-3 bg-gradient-to-br from-[#1a1b26] to-[#282a36] border-2 border-[#282a36]">
+                                            <div className="flex space-x-2">
+                                                <div className="h-2 w-2 rounded-full bg-[#bd93f9] animate-bounce" />
+                                                <div className="h-2 w-2 rounded-full bg-[#bd93f9] animate-bounce" style={{ animationDelay: "0.2s" }} />
+                                                <div className="h-2 w-2 rounded-full bg-[#bd93f9] animate-bounce" style={{ animationDelay: "0.4s" }} />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                {/* Message input */}
+                <div className="p-3 border-t-2 border-[#1a1b26] bg-[#0b0b11]">
+                    <ChatInput
+                        onSendMessage={handleSendMessageWithFiles}
+                        isLoading={isSending}
+                        placeholder="Type your message..."
+                        autoFocus={true}
+                    />
+                </div>
+            </div>
+        </>
+    );
+
+    return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
+}

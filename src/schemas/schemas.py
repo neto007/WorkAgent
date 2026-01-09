@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: schemas.py                                                            │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from pydantic import BaseModel, Field, validator, UUID4, ConfigDict
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -44,9 +15,7 @@ class ClientBase(BaseModel):
     def validate_email(cls, v):
         if v is None:
             return v
-        email_regex = r"^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$"
-        if not re.match(email_regex, v):
-            raise ValueError("Invalid email format")
+        # Email validation removed for local service usage
         return v
 
 
@@ -58,8 +27,7 @@ class Client(ClientBase):
     id: UUID
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ApiKeyBase(BaseModel):
@@ -85,6 +53,7 @@ class ApiKey(ApiKeyBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     is_active: bool
+    key_value_masked: Optional[str] = Field(default="*****", description="Masked API key value for display")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -170,8 +139,9 @@ class AgentBase(BaseModel):
         if "type" not in values:
             return v
 
-        # For workflow agents, we do not perform any validation
-        if "type" in values and values["type"] == "workflow":
+        # For workflow agents, skip validation on read (allow existing invalid data)
+        # Validation will be applied in AgentCreate/AgentUpdate
+        if values["type"] == "workflow":
             return v
 
         if not v and values.get("type") != "a2a":
@@ -228,6 +198,29 @@ class AgentBase(BaseModel):
 class AgentCreate(AgentBase):
     client_id: UUID
 
+    @validator("config")
+    def validate_workflow_on_create(cls, v, values):
+        """Validate workflow agents have proper configuration on creation."""
+        if values.get("type") == "workflow":
+            if not v:
+                raise ValueError("Configuration is required for workflow agent type")
+            if not isinstance(v, dict):
+                raise ValueError("Invalid configuration for workflow agent")
+            
+            # workflow field is required but can be empty dict initially
+            if "workflow" in v and v["workflow"]:
+                workflow = v["workflow"]
+                if not isinstance(workflow, dict):
+                    raise ValueError("workflow must be a dictionary")
+                
+                # If nodes/edges are provided, they must be lists
+                if "nodes" in workflow and not isinstance(workflow["nodes"], list):
+                    raise ValueError("workflow.nodes must be a list")
+                if "edges" in workflow and not isinstance(workflow["edges"], list):
+                    raise ValueError("workflow.edges must be a list")
+        
+        return v
+
 
 class Agent(AgentBase):
     id: UUID
@@ -235,10 +228,10 @@ class Agent(AgentBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
     agent_card_url: Optional[str] = None
+    avatar_url: Optional[str] = None
     folder_id: Optional[UUID4] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
     @validator("agent_card_url", pre=True)
     def set_agent_card_url(cls, v, values):
@@ -282,8 +275,7 @@ class MCPServer(MCPServerBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ToolBase(BaseModel):
@@ -302,8 +294,7 @@ class Tool(ToolBase):
     created_at: datetime
     updated_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentFolderBase(BaseModel):

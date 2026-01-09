@@ -1,33 +1,4 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: auth_routes.py                                                        │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response
 from sqlalchemy.orm import Session
 from src.config.database import get_db
 from src.models.models import User
@@ -56,6 +27,9 @@ from src.services.auth_service import (
     get_current_user,
 )
 import logging
+
+import logging
+from src.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -177,7 +151,9 @@ async def resend_verification_email(
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login_for_access_token(form_data: UserLogin, db: Session = Depends(get_db)):
+async def login_for_access_token(
+    response: Response, form_data: UserLogin, db: Session = Depends(get_db)
+):
     """
     Perform login and return a JWT access token
 
@@ -223,8 +199,39 @@ async def login_for_access_token(form_data: UserLogin, db: Session = Depends(get
             )
 
     access_token = create_access_token(user)
+    
+    # Determine if we should use secure cookies
+    # We disable secure cookies for localhost to allow development even if APP_URL is https (e.g. for production reference)
+    is_localhost = "localhost" in settings.APP_URL or "127.0.0.1" in settings.APP_URL
+    # Also disable secure cookies if DEBUG is True
+    is_secure = settings.APP_URL.startswith("https") and not is_localhost and not settings.DEBUG
+    
+    # Set HttpOnly cookie
+    # CRITICAL: path="/" ensures cookie is sent with ALL requests, not just /auth
+    # domain=None works with localhost and development
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=is_secure,
+        samesite="lax",
+        path="/",  # Cookie available for all paths
+        max_age=settings.JWT_EXPIRATION_TIME
+    )
+    
+    logger.info(f"Cookie set with secure={is_secure}, path=/, samesite=lax for user: {user.email}")
+    
     logger.info(f"Login successful for user: {user.email}")
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/logout", response_model=MessageResponse)
+async def logout(response: Response):
+    """
+    Logout user by clearing the auth cookie
+    """
+    response.delete_cookie(key="access_token")
+    return {"message": "Logged out successfully"}
 
 
 @router.post("/forgot-password", response_model=MessageResponse)

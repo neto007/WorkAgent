@@ -1,38 +1,9 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: auth_service.py                                                       │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from sqlalchemy.orm import Session
 from src.models.models import User
 from src.schemas.user import TokenData
 from src.services.user_service import get_user_by_email
 from src.utils.security import create_jwt_token
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from src.config.settings import settings
@@ -43,11 +14,13 @@ import logging
 logger = logging.getLogger(__name__)
 
 # Define OAuth2 authentication scheme with password flow
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/login", auto_error=False)
 
 
 async def get_current_user(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
 ) -> User:
     """
     Get the current user from the JWT token
@@ -65,6 +38,21 @@ async def get_current_user(
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Invalid credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+
+    # If header auth failed or was missing, check cookie
+    if not token:
+        token = request.cookies.get("access_token")
+        if token:
+            logger.info(f"Token found in cookie: {token[:10]}...")
+        else:
+            logger.warning("No token found in header or cookie")
+
+    if not token:
+        raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="No token found in header or cookie",
         headers={"WWW-Authenticate": "Bearer"},
     )
 
@@ -95,7 +83,11 @@ async def get_current_user(
 
     except JWTError as e:
         logger.error(f"Error decoding JWT token: {str(e)}")
-        raise credentials_exception
+        raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=f"Invalid credentials (JWT Error): {str(e)}",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
 
     # Search for user in the database
     user = get_user_by_email(db, email=email)
@@ -176,6 +168,7 @@ def create_access_token(user: User) -> str:
         "sub": user.email,
         "user_id": str(user.id),
         "is_admin": user.is_admin,
+        "role": user.role,
     }
 
     # Include client_id only if not administrator and client_id is set

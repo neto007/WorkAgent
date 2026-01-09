@@ -1,35 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: workflow_agent.py                                                     │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @contributors:                                                               │
-│ Victor Calazans - delay node implementation (May 17, 2025)                   │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from datetime import datetime
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
@@ -44,6 +12,9 @@ from src.services.agent_service import get_agent
 from sqlalchemy.orm import Session
 
 from langgraph.graph import StateGraph, END
+from src.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class State(TypedDict):
@@ -74,7 +45,7 @@ class WorkflowAgent(BaseAgent):
         self,
         name: str,
         flow_json: Dict[str, Any],
-        timeout: int = 300,
+        timeout: int = 3600,
         sub_agents: List[BaseAgent] = [],
         db: Session = None,
         **kwargs,
@@ -93,13 +64,13 @@ class WorkflowAgent(BaseAgent):
         super().__init__(
             name=name,
             flow_json=flow_json,
-            timeout=timeout,
+            timeout=self.timeout if self.timeout else 3600,
             sub_agents=sub_agents,
             db=db,
             **kwargs,
         )
 
-        print(
+        logger.debug(
             f"Workflow agent initialized with {len(flow_json.get('nodes', []))} nodes"
         )
 
@@ -112,7 +83,7 @@ class WorkflowAgent(BaseAgent):
             node_id: str,
             node_data: Dict[str, Any],
         ) -> AsyncGenerator[State, None]:
-            print("\n🏁 INITIAL NODE")
+            logger.debug("🏁 INITIAL NODE")
 
             content = state.get("content", [])
 
@@ -163,7 +134,7 @@ class WorkflowAgent(BaseAgent):
 
             # Increment cycle counter
             cycle_count = state.get("cycle_count", 0) + 1
-            print(f"\n👤 AGENT: {agent_name} (Cycle {cycle_count})")
+            logger.debug(f"👤 AGENT: {agent_name} (Cycle {cycle_count})")
 
             content = state.get("content", [])
             session_id = state.get("session_id", "")
@@ -205,7 +176,7 @@ class WorkflowAgent(BaseAgent):
                 new_content.append(modified_event)
 
 
-            print(f"New content: {new_content}")
+            logger.debug(f"New content: {new_content}")
 
             node_outputs = state.get("node_outputs", {})
             node_outputs[node_id] = {
@@ -236,7 +207,7 @@ class WorkflowAgent(BaseAgent):
             conditions = node_data.get("conditions", [])
             cycle_count = state.get("cycle_count", 0)
 
-            print(f"\n🔄 CONDITION: {label} (Cycle {cycle_count})")
+            logger.debug(f"🔄 CONDITION: {label} (Cycle {cycle_count})")
 
             content = state.get("content", [])
             conversation_history = state.get("conversation_history", [])
@@ -252,7 +223,7 @@ class WorkflowAgent(BaseAgent):
                         latest_event = event
                         break
                 if latest_event:
-                    print(
+                    logger.debug(
                         f"Evaluating condition only for the most recent event: '{latest_event}'"
                     )
 
@@ -273,7 +244,7 @@ class WorkflowAgent(BaseAgent):
                 operator = condition_data.get("operator")
                 expected_value = condition_data.get("value")
 
-                print(
+                logger.debug(
                     f"  Checking if {field} {operator} '{expected_value}' (current value: '{evaluation_state.get(field, '')}')"
                 )
                 if self._evaluate_condition(condition, evaluation_state):
@@ -281,7 +252,7 @@ class WorkflowAgent(BaseAgent):
                     condition_details.append(
                         f"{field} {operator} '{expected_value}' ✅"
                     )
-                    print(f"  ✅ Condition {condition_id} met!")
+                    logger.debug(f"  ✅ Condition {condition_id} met!")
                 else:
                     condition_details.append(
                         f"{field} {operator} '{expected_value}' ❌"
@@ -289,7 +260,7 @@ class WorkflowAgent(BaseAgent):
 
             # Check if the cycle reached the limit (extra security)
             if cycle_count >= 10:
-                print(
+                logger.warning(
                     f"⚠️ ATTENTION: Cycle limit reached ({cycle_count}). Forcing termination."
                 )
 
@@ -364,7 +335,7 @@ class WorkflowAgent(BaseAgent):
                 message_content = str(message_data) if message_data else ""
                 message_type = "text"
 
-            print(f"\n💬 MESSAGE-NODE: {message_content}")
+            logger.debug(f"💬 MESSAGE-NODE: {message_content}")
 
             content = state.get("content", [])
             session_id = state.get("session_id", "")
@@ -408,7 +379,7 @@ class WorkflowAgent(BaseAgent):
                 delay_seconds = delay_value * 3600
             
             label = node_data.get("label", "delay_node")
-            print(f"\n⏱️ DELAY-NODE: {delay_value} {delay_unit} - {delay_description}")
+            logger.debug(f"⏱️ DELAY-NODE: {delay_value} {delay_unit} - {delay_description}")
             
             content = state.get("content", [])
             session_id = state.get("session_id", "")
@@ -463,7 +434,7 @@ class WorkflowAgent(BaseAgent):
 
             result = self._process_condition(operator, actual_value, expected_value)
 
-            print(f"  Check '{operator}': {result}")
+            logger.debug(f"  Check '{operator}': {result}")
             return result
 
         return False
@@ -499,7 +470,7 @@ class WorkflowAgent(BaseAgent):
 
         if extracted_texts:
             joined_text = " ".join(extracted_texts)
-            print(f"  Extracted text from events: '{joined_text[:100]}...'")
+            logger.debug(f"  Extracted text from events: '{joined_text[:100]}...'")
             return joined_text
 
         return ""
@@ -600,7 +571,7 @@ class WorkflowAgent(BaseAgent):
         expected_lower = expected_str.lower()
         actual_lower = actual_str.lower()
 
-        print(
+        logger.debug(
             f"  Comparison '{operator}' without case distinction: '{expected_lower}' in '{actual_lower[:100]}...'"
         )
 
@@ -754,16 +725,16 @@ class WorkflowAgent(BaseAgent):
     ) -> StateGraph:
         """Creates a StateGraph from the flow data."""
         # Debug: Print flow_data structure
-        print(f"Flow data keys: {list(flow_data.keys()) if flow_data else 'None'}")
-        print(f"Flow data: {flow_data}")
+        logger.debug(f"Flow data keys: {list(flow_data.keys()) if flow_data else 'None'}")
+        # logger.debug(f"Flow data: {flow_data}") # Removed massive log dump
         
         # Extract nodes from the flow
         nodes = flow_data.get("nodes", [])
-        print(f"Found {len(nodes)} nodes in flow_data")
+        logger.debug(f"Found {len(nodes)} nodes in flow_data")
         
         if nodes:
             for i, node in enumerate(nodes):
-                print(f"Node {i}: id={node.get('id')}, type={node.get('type')}")
+                logger.debug(f"Node {i}: id={node.get('id')}, type={node.get('type')}")
 
         # Initialize StateGraph
         graph_builder = StateGraph(State)

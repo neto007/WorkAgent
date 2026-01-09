@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: run_seeders.py                                                        │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 from fastapi import HTTPException, status
@@ -77,12 +48,23 @@ def create_mcp_server(db: Session, server: MCPServerCreate) -> MCPServer:
         # Last edited by Arley Peter on 2025-05-17
         supplied_tools = server_data.pop("tools", [])
         if not supplied_tools:
-            discovered = discover_mcp_tools(server_data["config_json"])
-            print(f"🔍 Found {len(discovered)} tools.")
-            server_data["tools"] = discovered
+            try:
+                discovered = discover_mcp_tools(server_data["config_json"])
+                print(f"🔍 Found {len(discovered)} tools.")
+                server_data["tools"] = discovered
+            except Exception as e:
+                logger.error(f"Failed to discover tools during server creation: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Falha ao conectar ao servidor MCP ou descobrir ferramentas: {str(e)}"
+                )
 
         else:
-            server_data["tools"] = [tool.model_dump() for tool in supplied_tools]
+            # Handle both dict and Pydantic model cases
+            server_data["tools"] = [
+                tool if isinstance(tool, dict) else tool.model_dump() 
+                for tool in supplied_tools
+            ]
         db_server = MCPServer(**server_data)
         db.add(db_server)
         db.commit()
@@ -112,7 +94,17 @@ def update_mcp_server(
         server_data["tools"] = [tool.model_dump() for tool in server.tools]
 
         for key, value in server_data.items():
-            setattr(db_server, key, value)
+            if key == "config_json":
+                # Deep update for config_json to ensure nested dicts (headers) are preserved
+                current_config = getattr(db_server, "config_json") or {}
+                if isinstance(value, dict):
+                    # Merge if it's a dict, otherwise replace
+                    new_config = {**current_config, **value}
+                    setattr(db_server, key, new_config)
+                else:
+                    setattr(db_server, key, value)
+            else:
+                setattr(db_server, key, value)
 
         db.commit()
         db.refresh(db_server)

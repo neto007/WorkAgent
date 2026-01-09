@@ -1,33 +1,4 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: client_routes.py                                                      │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 from src.config.database import get_db
@@ -38,6 +9,7 @@ from src.core.jwt_middleware import (
     verify_user_client,
     verify_admin,
     get_current_user_client_id,
+    verify_role,
 )
 from src.schemas.schemas import (
     Client,
@@ -55,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 class ClientRegistration(BaseModel):
     name: str
-    email: EmailStr
+    email: str
     password: str
 
 
@@ -146,6 +118,7 @@ async def update_client(
 ):
     # Verify if the user has access to this client's data
     await verify_user_client(payload, db, client_id)
+    await verify_role("owner", payload)
 
     db_client = client_service.update_client(db, client_id, client)
     if db_client is None:
@@ -173,6 +146,7 @@ async def delete_client(
 @router.post("/{client_id}/impersonate", response_model=TokenResponse)
 async def impersonate_client(
     client_id: uuid.UUID,
+    response: Response,
     db: Session = Depends(get_db),
     payload: dict = Depends(get_jwt_token),
 ):
@@ -181,6 +155,7 @@ async def impersonate_client(
 
     Args:
         client_id: ID of the client to impersonate
+        response: Response object to set cookies
         db: Database session
         payload: JWT payload of the administrator
 
@@ -192,6 +167,29 @@ async def impersonate_client(
     """
     # Verify if the user is an administrator
     await verify_admin(payload)
+    
+    # Get current admin user ID
+    admin_user_id = payload.get('sub')
+    
+    # Query admin user directly to create backup token
+    from src.models.models import User
+    # Payload sub contains email, not UUID
+    admin_user = db.query(User).filter(User.email == admin_user_id).first()
+    if admin_user:
+        admin_backup_token = create_access_token(admin_user)
+        # Save admin token in backup cookie
+        logger.info(f"Setting admin_backup_token cookie for user {admin_user.email}")
+        response.set_cookie(
+            key="admin_backup_token",
+            value=admin_backup_token,
+            httponly=True,
+            secure=False,
+            samesite="lax",
+            max_age=60 * 60 * 24 * 7,  # 7 days
+            path="/"
+        )
+    else:
+        logger.error(f"FAILED to find admin user for backup token: {admin_user_id}")
 
     # Search for the client
     client = client_service.get_client(db, client_id)
@@ -209,8 +207,64 @@ async def impersonate_client(
 
     access_token = create_access_token(user)
 
+    # Set HttpOnly cookie like the login endpoint
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        path="/"
+    )
+
     logger.info(
         f"Administrator {payload.get('sub')} impersonated client {client.name} (ID: {client_id})"
     )
 
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+@router.post("/exit-impersonation", response_model=dict)
+async def exit_impersonation(
+    request: Request,
+    response: Response,
+):
+    """
+    Exit impersonation and restore admin session
+    
+    Swaps the client token for the backed-up admin token
+    """
+    # Debug: Print all cookies
+    logger.info(f"Exit impersonation cookies received: {request.cookies.keys()}")
+    
+    # Read admin backup token from cookies
+    admin_backup_token = request.cookies.get("admin_backup_token")
+    
+    if not admin_backup_token:
+        logger.warning("No admin backup token found when trying to exit impersonation")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No admin session to restore"
+        )
+    
+    logger.info("Found admin_backup_token, restoring session...")
+    
+    # Clear client token and backup
+    # response.delete_cookie(key="access_token", path="/") # Redundant if we overwrite
+    response.delete_cookie(key="admin_backup_token", path="/")
+    
+    # Restore admin token
+    response.set_cookie(
+        key="access_token",
+        value=admin_backup_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=60 * 60 * 24 * 7,  # 7 days
+        path="/"
+    )
+    
+    logger.info("Admin exited impersonation and session restored")
+    
+    return {"message": "Admin session restored successfully"}

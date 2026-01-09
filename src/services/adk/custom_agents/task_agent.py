@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: task_agent.py                                                         │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 14, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from attr import Factory
 from google.adk.agents import BaseAgent
 from google.adk.agents.invocation_context import InvocationContext
@@ -39,6 +10,9 @@ from sqlalchemy.orm import Session
 from typing import AsyncGenerator, List
 
 from src.schemas.agent_config import AgentTask
+from src.utils.logger import setup_logger
+
+logger = setup_logger(__name__)
 
 
 class TaskAgent(BaseAgent):
@@ -98,7 +72,7 @@ class TaskAgent(BaseAgent):
                 for event in reversed(ctx.session.events):
                     if event.author == "user" and event.content and event.content.parts:
                         user_message = event.content.parts[0].text
-                        print("Message found in session events")
+                        logger.debug("Message found in session events")
                         break
 
             # Check in the session state if the message was not found in the events
@@ -164,7 +138,7 @@ class TaskAgent(BaseAgent):
 
                 from src.services.adk.agent_builder import AgentBuilder
 
-                print(f"Building agent in Task agent: {agent.name}")
+                logger.debug(f"Building agent in Task agent: {agent.name}")
                 agent_builder = AgentBuilder(self.db)
                 root_agent, exit_stack = await agent_builder.build_agent(
                     agent, task.enabled_tools
@@ -178,12 +152,12 @@ class TaskAgent(BaseAgent):
                     async for event in root_agent.run_async(ctx):
                         yield event
                 except GeneratorExit:
-                    print("Generator was closed prematurely, handling cleanup...")
+                    logger.warning("Generator was closed prematurely, handling cleanup...")
                     # Allow the exception to propagate after cleanup
                     raise
                 except Exception as e:
                     error_msg = f"Error during agent execution: {str(e)}"
-                    print(error_msg)
+                    logger.error(error_msg)
                     yield Event(
                         author=self.name,
                         content=Content(
@@ -194,9 +168,9 @@ class TaskAgent(BaseAgent):
 
             except Exception as e:
                 error_msg = f"Error sending request: {str(e)}"
-                print(error_msg)
-                print(f"Error type: {type(e).__name__}")
-                print(f"Error details: {str(e)}")
+                logger.error(error_msg)
+                logger.error(f"Error type: {type(e).__name__}")
+                logger.error(f"Error details: {str(e)}")
 
                 yield Event(
                     author=self.name,
@@ -205,7 +179,7 @@ class TaskAgent(BaseAgent):
 
         except Exception as e:
             # Handle any uncaught error
-            print(f"Error executing Task agent: {str(e)}")
+            logger.error(f"Error executing Task agent: {str(e)}")
             yield Event(
                 author=self.name,
                 content=Content(
@@ -218,9 +192,9 @@ class TaskAgent(BaseAgent):
             if exit_stack:
                 try:
                     await exit_stack.aclose()
-                    print("Exit stack closed successfully")
+                    logger.debug("Exit stack closed successfully")
                 except Exception as e:
-                    print(f"Error closing exit_stack: {str(e)}")
+                    logger.error(f"Error closing exit_stack: {str(e)}")
 
             # Execute sub-agents only if no exception occurred
             try:
@@ -229,5 +203,5 @@ class TaskAgent(BaseAgent):
                         async for event in sub_agent.run_async(ctx):
                             yield event
             except Exception as sub_e:
-                print(f"Error executing sub-agents: {str(sub_e)}")
+                logger.error(f"Error executing sub-agents: {str(sub_e)}")
                 # We don't yield a new event here to avoid raising during cleanup

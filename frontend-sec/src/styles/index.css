@@ -1,0 +1,73 @@
+@import "tailwindcss";
+
+body {
+    background-color: #050101;
+    color: #f8f8f2;
+    font-family: 'JetBrains Mono', monospace;
+    margin: 0;
+}
+
+:root {
+    min-height: 100vh;
+    width: 100%;
+}
+
+.neon-text {
+    text-shadow: 0 0 10px currentColor, 0 0 20px currentColor;
+}
+
+/* Clean Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #1a1b26;
+    border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #bd93f9;
+}
+
+.grid-bg {
+    background-image:
+        radial-gradient(rgba(189, 147, 249, 0.05) 1px, transparent 1px);
+    background-size: 40px 40px;
+}
+
+/* Cyberpunk Scrollbar - Global */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: #bd93f9 #0b0b11;
+}
+
+*::-webkit-scrollbar {
+    width: 12px;
+    height: 12px;
+}
+
+*::-webkit-scrollbar-track {
+    background: #0b0b11;
+    border-left: 1px solid #1a1b26;
+}
+
+*::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #bd93f9, #ff79c6);
+    border-radius: 6px;
+    border: 2px solid #0b0b11;
+    box-shadow: 0 0 10px rgba(189, 147, 249, 0.5);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: linear-gradient(180deg, #ff79c6, #50fa7b);
+    box-shadow: 0 0 15px rgba(80, 250, 123, 0.7);
+}
+
+*::-webkit-scrollbar-corner {
+    background: #0b0b11;
+}

@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: chat_routes.py                                                        │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 import uuid
 import base64
 from fastapi import (
@@ -134,129 +105,153 @@ async def websocket_chat(
     db: Session = Depends(get_db),
 ):
     try:
-        # Accept the connection
         await websocket.accept()
-        logger.info("WebSocket connection accepted, waiting for authentication")
+        logger.info("WebSocket connection accepted, checking for authentication")
 
-        # Wait for authentication message
-        try:
-            auth_data = await websocket.receive_json()
-            logger.info(f"Authentication data received: {auth_data}")
+        is_authenticated = False
+        first_message_data = None
 
-            if not (
-                auth_data.get("type") == "authorization"
-                and (auth_data.get("token") or auth_data.get("api_key"))
-            ):
-                logger.warning("Invalid authentication message")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            # Verify if the agent exists
-            agent = agent_service.get_agent(db, agent_id)
-            if not agent:
-                logger.warning(f"Agent {agent_id} not found")
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            # Verify authentication
-            is_authenticated = False
-
-            # Try with JWT token
-            if auth_data.get("token"):
-                try:
-                    payload = await get_jwt_token_ws(auth_data["token"])
-                    if payload:
-                        # Verify if the user has access to the agent
-                        await verify_user_client(payload, db, agent.client_id)
-                        is_authenticated = True
-                except Exception as e:
-                    logger.warning(f"JWT authentication failed: {str(e)}")
-
-            # If JWT fails, try with API key
-            if not is_authenticated and auth_data.get("api_key"):
-                if agent.config and agent.config.get("api_key") == auth_data.get(
-                    "api_key"
-                ):
+        # 1. Try Cookie Authentication
+        cookie_token = websocket.cookies.get("access_token")
+        if cookie_token:
+            try:
+                payload = await get_jwt_token_ws(cookie_token)
+                agent = agent_service.get_agent(db, agent_id)
+                if agent and payload:
+                    await verify_user_client(payload, db, agent.client_id)
                     is_authenticated = True
+                    logger.info(f"Authenticated via Cookie for agent {agent_id}")
+            except Exception as e:
+                logger.warning(f"Cookie authentication failed: {str(e)}")
+
+        # 2. Handle First Message (Auth or Chat)
+        try:
+            data = await websocket.receive_json()
+            
+            # Check if it is an explicit auth message
+            if data.get("type") == "authorization":
+                logger.info(f"Authentication data received: {data}")
+                
+                # Logic for explicit auth (override cookie auth or first attempt)
+                auth_success_local = False
+                agent = agent_service.get_agent(db, agent_id)
+                
+                if not agent:
+                     logger.warning(f"Agent {agent_id} not found")
+                     await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                     return
+
+                if data.get("token"):
+                    try:
+                        payload = await get_jwt_token_ws(data["token"])
+                        if payload:
+                            await verify_user_client(payload, db, agent.client_id)
+                            auth_success_local = True
+                    except Exception as e:
+                        logger.warning(f"JWT handshake authentication failed: {str(e)}")
+                
+                if not auth_success_local and data.get("api_key"):
+                    if agent.config and agent.config.get("api_key") == data.get("api_key"):
+                        auth_success_local = True
+                    else:
+                        logger.warning("Invalid API key")
+
+                if auth_success_local:
+                    is_authenticated = True
+                elif not is_authenticated: # Failed local auth and no cookie auth
+                    logger.warning("Invalid authentication message")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
+            
+            else:
+                # It is NOT an auth message. It is likely a chat message.
+                if is_authenticated:
+                    # Treat as first chat message
+                    first_message_data = data
                 else:
-                    logger.warning("Invalid API key")
-
-            if not is_authenticated:
-                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-                return
-
-            logger.info(
-                f"WebSocket connection established for agent {agent_id} and external_id {external_id}"
-            )
-
-            while True:
-                try:
-                    data = await websocket.receive_json()
-                    logger.info(f"Received message: {data}")
-                    message = data.get("message")
-
-                    if not message:
-                        continue
-
-                    files = None
-                    if data.get("files") and isinstance(data.get("files"), list):
-                        try:
-                            files = []
-                            for file_data in data.get("files"):
-                                if (
-                                    isinstance(file_data, dict)
-                                    and file_data.get("filename")
-                                    and file_data.get("content_type")
-                                    and file_data.get("data")
-                                ):
-                                    files.append(
-                                        FileData(
-                                            filename=file_data.get("filename"),
-                                            content_type=file_data.get("content_type"),
-                                            data=file_data.get("data"),
-                                        )
-                                    )
-                            logger.info(f"Processed {len(files)} files via WebSocket")
-                        except Exception as e:
-                            logger.error(f"Error processing files: {str(e)}")
-                            files = None
-
-                    async for chunk in run_agent_stream(
-                        agent_id=agent_id,
-                        external_id=external_id,
-                        message=message,
-                        session_service=session_service,
-                        artifacts_service=artifacts_service,
-                        memory_service=memory_service,
-                        db=db,
-                        files=files,
-                    ):
-                        await websocket.send_json(
-                            {"message": json.loads(chunk), "turn_complete": False}
-                        )
-
-                    # Send signal of complete turn
-                    await websocket.send_json({"message": "", "turn_complete": True})
-
-                except WebSocketDisconnect:
-                    logger.info("Client disconnected")
-                    break
-                except json.JSONDecodeError:
-                    logger.warning("Invalid JSON message received")
-                    continue
-                except Exception as e:
-                    logger.error(f"Error in WebSocket message handling: {str(e)}")
-                    await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
-                    break
+                    # Not authenticated and not an auth message -> Fail
+                    logger.warning("Unauthenticated connection attempting to send data")
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                    return
 
         except WebSocketDisconnect:
-            logger.info("Client disconnected during authentication")
-        except json.JSONDecodeError:
-            logger.warning("Invalid authentication message format")
+             logger.info("Client disconnected during handshake")
+             return
+
+        if not is_authenticated:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
-        except Exception as e:
-            logger.error(f"Error during authentication: {str(e)}")
-            await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+            return
+
+        logger.info(
+            f"WebSocket connection established for agent {agent_id} and external_id {external_id}"
+        )
+
+        # 3. Message Processing Loop
+        while True:
+            try:
+                if first_message_data:
+                    data = first_message_data
+                    first_message_data = None
+                    logger.info(f"Processing first message: {data}")
+                else:
+                    data = await websocket.receive_json()
+                    logger.info(f"Received message: {data}")
+
+                message = data.get("message")
+
+                if not message:
+                    continue
+
+                files = None
+                if data.get("files") and isinstance(data.get("files"), list):
+                    try:
+                        files = []
+                        for file_data in data.get("files"):
+                            if (
+                                isinstance(file_data, dict)
+                                and file_data.get("filename")
+                                and file_data.get("content_type")
+                                and file_data.get("data")
+                            ):
+                                files.append(
+                                    FileData(
+                                        filename=file_data.get("filename"),
+                                        content_type=file_data.get("content_type"),
+                                        data=file_data.get("data"),
+                                    )
+                                )
+                        logger.info(f"Processed {len(files)} files via WebSocket")
+                    except Exception as e:
+                        logger.error(f"Error processing files: {str(e)}")
+                        files = None
+
+                async for chunk in run_agent_stream(
+                    agent_id=agent_id,
+                    external_id=external_id,
+                    message=message,
+                    session_service=session_service,
+                    artifacts_service=artifacts_service,
+                    memory_service=memory_service,
+                    db=db,
+                    files=files,
+                ):
+                    await websocket.send_json(
+                        {"message": json.loads(chunk), "turn_complete": False}
+                    )
+
+                # Send signal of complete turn
+                await websocket.send_json({"message": "", "turn_complete": True})
+
+            except WebSocketDisconnect:
+                logger.info("Client disconnected")
+                break
+            except json.JSONDecodeError:
+                logger.warning("Invalid JSON message received")
+                continue
+            except Exception as e:
+                logger.error(f"Error in WebSocket message handling: {str(e)}")
+                await websocket.close(code=status.WS_1011_INTERNAL_ERROR)
+                break
 
     except Exception as e:
         logger.error(f"WebSocket error: {str(e)}")

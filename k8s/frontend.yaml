@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evo-ai-frontend
+  namespace: evo-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: evo-ai-frontend
+  template:
+    metadata:
+      labels:
+        app: evo-ai-frontend
+    spec:
+      containers:
+      - name: frontend
+        image: evo-ai-frontend:latest # Replace with your actual image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 3000
+        env:
+        - name: NEXT_PUBLIC_API_URL
+          value: "http://localhost:8000" # In k8s this should be ingress URL or handled at build time
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evo-ai-frontend
+  namespace: evo-ai
+spec:
+  ports:
+  - port: 3000
+    targetPort: 3000
+  selector:
+    app: evo-ai-frontend

@@ -1,0 +1,22 @@
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: mcp-tool-sync
+  namespace: evo-ai
+spec:
+  schedule: "0 * * * *" # A cada hora
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - name: mcp-sync
+            image: evo-ai-backend:latest
+            imagePullPolicy: IfNotPresent
+            command: ["python", "-m", "src.scripts.sync_mcp_tools"]
+            envFrom:
+            - configMapRef:
+                name: evo-ai-config
+            - secretRef:
+                name: evo-ai-secret
+          restartPolicy: OnFailure

@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: evo-ai-config
+  namespace: evo-ai
+data:
+  API_TITLE: "Evo API"
+  API_DESCRIPTION: "API para execução de agentes de IA"
+  API_VERSION: "1.0.0"
+  API_URL: "http://evo_api.superlab.app"
+  ORGANIZATION_NAME: "Evo AI"
+  ORGANIZATION_URL: "https://evo_api.superlab.app"
+  AI_ENGINE: "adk"
+  LOG_LEVEL: "DEBUG"
+  LOG_DIR: "logs"
+  TOOLS_CACHE_TTL: "3600"
+  JWT_ALGORITHM: "HS256"
+  JWT_EXPIRATION_TIME: "3600"
+  EMAIL_PROVIDER: "sendgrid"
+  EMAIL_FROM: "noreply@yourdomain.com"
+  SMTP_HOST: "your-smtp-host"
+  SMTP_FROM: "noreply-smtp@yourdomain.com"
+  SMTP_PORT: "587"
+  SMTP_USE_TLS: "true"
+  SMTP_USE_SSL: "false"
+  APP_URL: "https://evo.superlab.app"
+  LANGFUSE_HOST: "http://localhost:3001"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:3001/api/public/ingestion"
+  OTEL_EXPORTER_OTLP_INSECURE: "true"
+  HOST: "0.0.0.0"
+  PORT: "8000"
+  DEBUG: "true"
+  DEMO_CLIENT_NAME: "Demo Client"
+  # Redis non-sensitive
+  REDIS_SSL: "false"
+  REDIS_KEY_PREFIX: "a2a:"
+  REDIS_TTL: "3600"
+  REDIS_DB: "0"

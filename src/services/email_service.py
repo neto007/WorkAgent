@@ -1,32 +1,3 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: email_service.py                                                      │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 import sendgrid
 from sendgrid.helpers.mail import Mail, Email, To, Content
 import logging
@@ -302,4 +273,38 @@ def send_account_locked_email(
 
     except Exception as e:
         logger.error(f"Error preparing account locked email to {email}: {str(e)}")
+        return False
+
+def send_invite_email(email: str, password: str, role: str, organization_name: str) -> bool:
+    """
+    Send an invitation email to a new team member
+    
+    Args:
+        email: Recipient's email
+        password: Temporary password
+        role: Assigned role
+        organization_name: Name of the organization
+        
+    Returns:
+        bool: True if sent successfully
+    """
+    try:
+        subject = f"Invitation to join {organization_name} on Evo AI"
+        login_link = f"{settings.APP_URL}/auth/login"
+        
+        html_content = _render_template(
+            "user_invite",
+            {
+                "login_link": login_link,
+                "password": password,
+                "role": role,
+                "organization_name": organization_name,
+                "current_year": datetime.now().year,
+            }
+        )
+        
+        return send_email(email, subject, html_content)
+        
+    except Exception as e:
+        logger.error(f"Error preparing invite email to {email}: {str(e)}")
         return False

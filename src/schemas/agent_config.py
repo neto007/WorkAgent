@@ -1,34 +1,5 @@
-"""
-┌──────────────────────────────────────────────────────────────────────────────┐
-│ @author: Davidson Gomes                                                      │
-│ @file: agent_config.py                                                       │
-│ Developed by: Davidson Gomes                                                 │
-│ Creation date: May 13, 2025                                                  │
-│ Contact: contato@evolution-api.com                                           │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @copyright © Evolution API 2025. All rights reserved.                        │
-│ Licensed under the Apache License, Version 2.0                               │
-│                                                                              │
-│ You may not use this file except in compliance with the License.             │
-│ You may obtain a copy of the License at                                      │
-│                                                                              │
-│    http://www.apache.org/licenses/LICENSE-2.0                                │
-│                                                                              │
-│ Unless required by applicable law or agreed to in writing, software          │
-│ distributed under the License is distributed on an "AS IS" BASIS,            │
-│ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.     │
-│ See the License for the specific language governing permissions and          │
-│ limitations under the License.                                               │
-├──────────────────────────────────────────────────────────────────────────────┤
-│ @important                                                                   │
-│ For any future changes to the code in this file, it is recommended to        │
-│ include, together with the modification, the information of the developer    │
-│ who changed it and the date of modification.                                 │
-└──────────────────────────────────────────────────────────────────────────────┘
-"""
-
 from typing import List, Optional, Dict, Union, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 from uuid import UUID
 import secrets
 import string
@@ -44,8 +15,7 @@ class ToolConfig(BaseModel):
         default_factory=dict, description="Environment variables of the tool"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MCPServerConfig(BaseModel):
@@ -59,8 +29,7 @@ class MCPServerConfig(BaseModel):
         default_factory=list, description="List of tools of the server"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomMCPServerConfig(BaseModel):
@@ -71,8 +40,7 @@ class CustomMCPServerConfig(BaseModel):
         default_factory=dict, description="Headers for requests to the server"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class FlowNodes(BaseModel):
@@ -89,8 +57,7 @@ class HTTPToolParameter(BaseModel):
     required: bool
     description: str
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HTTPToolParameters(BaseModel):
@@ -100,8 +67,7 @@ class HTTPToolParameters(BaseModel):
     query_params: Optional[Dict[str, Union[str, List[str]]]] = None
     body_params: Optional[Dict[str, HTTPToolParameter]] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HTTPToolErrorHandling(BaseModel):
@@ -111,8 +77,7 @@ class HTTPToolErrorHandling(BaseModel):
     retry_count: int
     fallback_response: Dict[str, str]
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class HTTPTool(BaseModel):
@@ -127,8 +92,7 @@ class HTTPTool(BaseModel):
     description: str
     error_handling: HTTPToolErrorHandling
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class CustomTools(BaseModel):
@@ -138,8 +102,7 @@ class CustomTools(BaseModel):
         default_factory=list, description="List of HTTP tools"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 def generate_api_key(length: int = 32) -> str:
@@ -178,8 +141,7 @@ class LLMConfig(BaseModel):
         default=None, description="Workflow configuration"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SequentialConfig(BaseModel):
@@ -189,8 +151,7 @@ class SequentialConfig(BaseModel):
         ..., description="List of IDs of sub-agents in execution order"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ParallelConfig(BaseModel):
@@ -200,8 +161,7 @@ class ParallelConfig(BaseModel):
         ..., description="List of IDs of sub-agents for parallel execution"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class LoopConfig(BaseModel):
@@ -217,8 +177,7 @@ class LoopConfig(BaseModel):
         default=None, description="Condition to stop the loop"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class WorkflowConfig(BaseModel):
@@ -234,8 +193,7 @@ class WorkflowConfig(BaseModel):
         default_factory=generate_api_key, description="API key for the workflow agent"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentTask(BaseModel):
@@ -259,8 +217,7 @@ class AgentTask(BaseModel):
                 raise ValueError(f"Invalid UUID format for agent_id: {v}")
         return v
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AgentConfig(BaseModel):
@@ -276,5 +233,4 @@ class AgentConfig(BaseModel):
         default_factory=list, description="List of IDs of sub-agents used in agent"
     )
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

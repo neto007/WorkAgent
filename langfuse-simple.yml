@@ -1,0 +1,90 @@
+# Docker Compose simplificado do Langfuse sem ClickHouse
+services:
+  langfuse-web:
+    image: docker.io/langfuse/langfuse:2.74.0
+    restart: always
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3001:3000"
+    environment:
+      NEXTAUTH_URL: http://localhost:3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5433/postgres
+      SALT: "evo-ai-salt-12345"
+      ENCRYPTION_KEY: "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+      TELEMETRY_ENABLED: "false"
+      LANGFUSE_ENABLE_EXPERIMENTAL_FEATURES: "true"
+      CLICKHOUSE_MIGRATION_URL: "clickhouse://clickhouse:9000"
+      CLICKHOUSE_URL: "http://clickhouse:8123"
+      CLICKHOUSE_USER: "clickhouse"
+      CLICKHOUSE_PASSWORD: "clickhouse"
+      CLICKHOUSE_CLUSTER_ENABLED: "false"
+      NEXTAUTH_SECRET: "evo-ai-nextauth-secret-12345"
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+      REDIS_AUTH: "myredissecret"
+      NODE_OPTIONS: "--max-old-space-size=2048 --no-warnings"
+      LANGFUSE_DISABLE_INSTRUMENTATION: "true"
+      NEXT_TELEMETRY_DISABLED: "1"
+
+  postgres:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - langfuse_postgres_data:/var/lib/postgresql/data
+    ports:
+      - "127.0.0.1:5433:5433"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:7
+    restart: always
+    command: redis-server --requirepass myredissecret
+    volumes:
+      - langfuse_redis_data:/data
+    ports:
+      - "127.0.0.1:6378:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:23.8
+    restart: always
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: clickhouse
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - ./clickhouse-config.xml:/etc/clickhouse-server/config.d/custom.xml
+    ports:
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8123/ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+volumes:
+  langfuse_postgres_data:
+    driver: local
+  langfuse_redis_data:
+    driver: local
+  langfuse_clickhouse_data:
+    driver: local

@@ -2,16 +2,20 @@ version: "3.8"
 
 services:
   api:
-    image: evoapicloud/evo-ai:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     ports:
       - "8000:8000"
     environment:
-      POSTGRES_CONNECTION_STRING: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@postgres:5432/evo_ai
+      POSTGRES_CONNECTION_STRING: postgresql://postgres:root@postgres:5433/evo_ai
       REDIS_HOST: redis
-      REDIS_PORT: ${REDIS_PORT:-6379}
+      REDIS_PORT: ${REDIS_PORT:-6380}
       REDIS_PASSWORD: ${REDIS_PASSWORD:-""}
       REDIS_SSL: "false"
       REDIS_KEY_PREFIX: "a2a:"
@@ -21,12 +25,22 @@ services:
       EMAIL_FROM: ${EMAIL_FROM}
       APP_URL: ${APP_URL}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      DEBUG: ${DEBUG:-false}
+      DEBUG: ${DEBUG:-true}
+      ADMIN_EMAIL: ${ADMIN_EMAIL}
+      ADMIN_INITIAL_PASSWORD: ${ADMIN_INITIAL_PASSWORD}
+      DEMO_EMAIL: ${DEMO_EMAIL}
+      DEMO_PASSWORD: ${DEMO_PASSWORD}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
+      LANGFUSE_HOST: ${LANGFUSE_HOST}
     volumes:
-      - ./logs:/app/logs
+      - ./src:/app/src
       - ./static:/app/static
+      - ./logs:/app/logs
+    command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -37,18 +51,34 @@ services:
           cpus: "1"
           memory: 1G
 
+  frontend:
+    build:
+      context: ./frontend-sec
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend-sec:/app
+      - /app/node_modules
+    depends_on:
+      - api
+    restart: always
+
   postgres:
     image: postgres:14-alpine
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-root}
       POSTGRES_DB: evo_ai
+      PGPORT: 5433
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5433"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -p 5433"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -63,16 +93,18 @@ services:
     image: redis:alpine
     command:
       - redis-server
+      - --port
+      - "6380"
       - --appendonly
       - "yes"
       - --requirepass
       - "${REDIS_PASSWORD}"
     ports:
-      - "${REDIS_PORT:-6379}:6379"
+      - "${REDIS_PORT:-6380}:6380"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-p", "6380", "ping"]
       interval: 5s
       timeout: 30s
       retries: 50

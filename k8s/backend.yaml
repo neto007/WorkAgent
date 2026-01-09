@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: evo-ai-backend
+  namespace: evo-ai
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: evo-ai-backend
+  template:
+    metadata:
+      labels:
+        app: evo-ai-backend
+    spec:
+      containers:
+      - name: api
+        image: evo-ai-backend:latest # Replace with your actual image
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8000
+        envFrom:
+        - configMapRef:
+            name: evo-ai-config
+        - secretRef:
+            name: evo-ai-secret
+        volumeMounts:
+        - name: uploads-volume
+          mountPath: /app/static/uploads
+        # Overrides or specific vars if needed
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 10
+      volumes:
+      - name: uploads-volume
+        persistentVolumeClaim:
+          claimName: uploads-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: evo-ai-backend
+  namespace: evo-ai
+spec:
+  ports:
+  - port: 8000
+    targetPort: 8000
+  selector:
+    app: evo-ai-backend
