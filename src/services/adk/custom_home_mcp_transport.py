@@ -168,13 +168,17 @@ async def custom_home_mcp_client(
                                                         await read_stream_writer.send(exc)
                                                     break
 
+                                    except httpx.ConnectError as exc:
+                                        logger.error(f"Connection error to {post_url}: {exc}")
+                                        await read_stream_writer.send(exc)
+                                        break
                                     except httpx.HTTPStatusError as exc:
-                                        logger.error(f"HTTP error: {exc}")
+                                        logger.error(f"HTTP error from {post_url}: {exc}")
                                         await read_stream_writer.send(exc)
                                         # Critical error, stop this handler and close stream
                                         break
                                     except Exception as exc:
-                                        logger.error(f"Error in request: {exc}")
+                                        logger.error(f"Error in MCP request to {post_url}: {exc}")
                                         await read_stream_writer.send(exc)
                                         # For other errors, we might want to continue, but for custom transport
                                         # usually one failure means it's broken

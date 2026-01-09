@@ -99,6 +99,8 @@ class MCPService:
                 exit_stack = AsyncExitStack()
                 all_mcp_tools = []
                 try:
+                    import anyio
+
                     client_context = custom_home_mcp_client(
                         url=server_config["url"],
                         headers=server_config.get("headers", {}),
@@ -107,7 +109,11 @@ class MCPService:
                     )
                     transports = await exit_stack.enter_async_context(client_context)
                     session = await exit_stack.enter_async_context(ClientSession(*transports))
-                    await session.initialize()
+
+                    # Handshake with timeout
+                    logger.debug("Initializing MCP session...")
+                    async with anyio.fail_after(10):
+                        await session.initialize()
 
                     # List tools from the session with pagination
                     cursor = None
@@ -115,7 +121,9 @@ class MCPService:
                     while True:
                         page_count += 1
                         logger.debug(f"Fetching MCP tools page {page_count} (cursor={cursor})...")
-                        tools_result = await session.list_tools(cursor=cursor)
+                        async with anyio.fail_after(15):
+                            tools_result = await session.list_tools(cursor=cursor)
+
                         batch_size = len(tools_result.tools)
                         all_mcp_tools.extend(tools_result.tools)
 
@@ -133,6 +141,11 @@ class MCPService:
                                 "Reached 50 pages limit, stopping pagination safety break."
                             )
                             break
+                except (anyio.ExceptionGroup, TimeoutError, Exception) as e:
+                    logger.warning(f"Failed to connect or list tools from custom MCP server: {e}")
+                    # If we already have some tools, we can continue, but usually [] is safer if failed early
+                    if not all_mcp_tools:
+                        return [], None
                 except Exception as e:
                     logger.warning(f"Failed to connect or list tools from custom MCP server: {e}")
                     # If we already have some tools, we can continue, but usually [] is safer if failed early
