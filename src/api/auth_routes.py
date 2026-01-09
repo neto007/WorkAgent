@@ -30,6 +30,7 @@ from src.services.user_service import (
     reset_password,
     verify_email,
 )
+from src.services.token_service import token_service
 
 logger = logging.getLogger(__name__)
 
@@ -147,14 +148,14 @@ async def login_for_access_token(
     response: Response, form_data: UserLogin, db: Session = Depends(get_db)
 ):
     """
-    Perform login and return a JWT access token
+    Perform login and return JWT access token + refresh token
 
     Args:
         form_data: Login data (email and password)
         db: Database session
 
     Returns:
-        TokenResponse: Access token and type
+        TokenResponse: Access token, refresh token and type
 
     Raises:
         HTTPException: If credentials are invalid
@@ -188,40 +189,96 @@ async def login_for_access_token(
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-    access_token = create_access_token(user)
+    # Create token pair (access + refresh)
+    access_token, refresh_token = token_service.create_token_pair(
+        user_id=str(user.id), db=db, device_info=None  # TODO: Add request info
+    )
 
     # Determine if we should use secure cookies
-    # We disable secure cookies for localhost to allow development even if APP_URL is https (e.g. for production reference)
     is_localhost = "localhost" in settings.APP_URL or "127.0.0.1" in settings.APP_URL
-    # Also disable secure cookies if DEBUG is True
     is_secure = settings.APP_URL.startswith("https") and not is_localhost and not settings.DEBUG
 
-    # Set HttpOnly cookie
-    # CRITICAL: path="/" ensures cookie is sent with ALL requests, not just /auth
-    # domain=None works with localhost and development
+    # Set HttpOnly cookie for access token
     response.set_cookie(
         key="access_token",
         value=access_token,
         httponly=True,
         secure=is_secure,
         samesite="lax",
-        path="/",  # Cookie available for all paths
-        max_age=settings.JWT_EXPIRATION_TIME,
+        path="/",
+        max_age=900,  # 15 minutes
     )
 
-    logger.info(f"Cookie set with secure={is_secure}, path=/, samesite=lax for user: {user.email}")
-
     logger.info(f"Login successful for user: {user.email}")
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_type": "bearer",
+        "expires_in": 900,
+    }
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_access_token(refresh_token: str, db: Session = Depends(get_db)):
+    """
+    Refresh access token using refresh token
+
+    Args:
+        refresh_token: Refresh token
+        db: Database session
+
+    Returns:
+        TokenResponse: New access token
+
+    Raises:
+        HTTPException: If refresh token is invalid or expired
+    """
+    new_access_token = token_service.refresh_access_token(refresh_token, db)
+
+    if not new_access_token:
+        logger.warning("Invalid or expired refresh token")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token",
+        )
+
+    logger.info("Access token refreshed successfully")
+    return {"access_token": new_access_token, "token_type": "bearer", "expires_in": 900}
 
 
 @router.post("/logout", response_model=MessageResponse)
-async def logout(response: Response):
+async def logout(response: Response, refresh_token: str = None, db: Session = Depends(get_db)):
     """
-    Logout user by clearing the auth cookie
+    Logout user by clearing cookie and revoking refresh token
     """
+    # Clear cookie
     response.delete_cookie(key="access_token")
+
+    # Revoke refresh token if provided
+    if refresh_token:
+        token_service.revoke_refresh_token(refresh_token, db)
+        logger.info("Refresh token revoked")
+
     return {"message": "Logged out successfully"}
+
+
+@router.post("/logout-all", response_model=MessageResponse)
+async def logout_all_devices(
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Logout from all devices by revoking all refresh tokens
+    """
+    # Clear cookie
+    response.delete_cookie(key="access_token")
+
+    # Revoke all user tokens
+    count = token_service.revoke_all_user_tokens(str(current_user.id), db)
+
+    logger.info(f"Revoked {count} tokens for user {current_user.email}")
+    return {"message": f"Logged out from {count} devices"}
 
 
 @router.post("/forgot-password", response_model=MessageResponse)
