@@ -41,24 +41,30 @@ const LoginPage: React.FC = () => {
         setLoginError('');
 
         try {
+            console.log('🔐 Attempting login...');
             const response = await login({
                 email: loginData.email,
                 password: loginData.password,
             });
 
+            console.log('✅ Login response:', response.data);
             const { data } = response;
 
             if (data.access_token && data.refresh_token) {
+                console.log('🔑 Tokens received, fetching user data...');
                 // Buscar dados do usuário
                 const meResponse = await getMe();
+                console.log('👤 User data:', meResponse.data);
 
                 // Atualizar AuthContext com tokens e usuário
                 auth.login(data.access_token, data.refresh_token, meResponse.data);
+                console.log('✅ Auth context updated, redirecting...');
 
                 // Redirecionar para página protegida
                 window.location.href = '/agents';
             }
         } catch (error: any) {
+            console.error('❌ Login error:', error);
             let errorDetail = 'Check your credentials and try again.';
             if (error?.response?.data) {
                 if (typeof error.response.data.detail === 'string') {
