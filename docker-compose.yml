@@ -3,7 +3,7 @@ version: "3.8"
 services:
   api:
     build:
-      context: .
+      context: ./backend
       dockerfile: Dockerfile
     depends_on:
       postgres:
@@ -35,9 +35,9 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY}
       LANGFUSE_HOST: ${LANGFUSE_HOST}
     volumes:
-      - ./src:/app/src
-      - ./static:/app/static
-      - ./logs:/app/logs
+      - ./backend/src:/app/src
+      - ./backend/static:/app/static
+      - ./backend/logs:/app/logs
     command: sh -c "alembic upgrade head && uvicorn src.main:app --host 0.0.0.0 --port 8000 --reload"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -53,14 +53,14 @@ services:
 
   frontend:
     build:
-      context: ./frontend-sec
+      context: ./frontend
       dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8000
     volumes:
-      - ./frontend-sec:/app
+      - ./frontend:/app
       - /app/node_modules
     depends_on:
       - api
