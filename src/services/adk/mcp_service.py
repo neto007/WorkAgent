@@ -97,6 +97,7 @@ class MCPService:
 
                 # Use custom transport for CustomHomeMCP
                 exit_stack = AsyncExitStack()
+                all_mcp_tools = []
                 try:
                     client_context = custom_home_mcp_client(
                         url=server_config["url"],
@@ -107,33 +108,36 @@ class MCPService:
                     transports = await exit_stack.enter_async_context(client_context)
                     session = await exit_stack.enter_async_context(ClientSession(*transports))
                     await session.initialize()
+
+                    # List tools from the session with pagination
+                    cursor = None
+                    page_count = 0
+                    while True:
+                        page_count += 1
+                        logger.debug(f"Fetching MCP tools page {page_count} (cursor={cursor})...")
+                        tools_result = await session.list_tools(cursor=cursor)
+                        batch_size = len(tools_result.tools)
+                        all_mcp_tools.extend(tools_result.tools)
+
+                        cursor = tools_result.nextCursor
+                        logger.debug(
+                            f"Page {page_count} received {batch_size} tools. Next cursor: {cursor}"
+                        )
+
+                        if not cursor:
+                            break
+
+                        # Safety break to prevent infinite loops if server is broken
+                        if page_count > 50:
+                            logger.warning(
+                                "Reached 50 pages limit, stopping pagination safety break."
+                            )
+                            break
                 except Exception as e:
-                    logger.warning(f"Failed to connect to custom MCP server: {e}")
-                    return [], None
-
-                # List tools from the session with pagination
-                all_mcp_tools = []
-                cursor = None
-                page_count = 0
-                while True:
-                    page_count += 1
-                    logger.debug(f"Fetching MCP tools page {page_count} (cursor={cursor})...")
-                    tools_result = await session.list_tools(cursor=cursor)
-                    batch_size = len(tools_result.tools)
-                    all_mcp_tools.extend(tools_result.tools)
-
-                    cursor = tools_result.nextCursor
-                    logger.debug(
-                        f"Page {page_count} received {batch_size} tools. Next cursor: {cursor}"
-                    )
-
-                    if not cursor:
-                        break
-
-                    # Safety break to prevent infinite loops if server is broken
-                    if page_count > 50:
-                        logger.warning("Reached 50 pages limit, stopping pagination safety break.")
-                        break
+                    logger.warning(f"Failed to connect or list tools from custom MCP server: {e}")
+                    # If we already have some tools, we can continue, but usually [] is safer if failed early
+                    if not all_mcp_tools:
+                        return [], None
 
                 from google.adk.tools.mcp_tool import MCPTool
 
